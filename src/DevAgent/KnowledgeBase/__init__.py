@@ -7,3 +7,8 @@ The KnowledgeBase Module provides the following Features:
 
 """
 from __future__ import annotations
+
+
+### Import these last to avoid Circular Dependencies ###
+
+from . import corpus

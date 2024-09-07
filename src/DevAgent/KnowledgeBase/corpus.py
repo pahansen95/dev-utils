@@ -16,6 +16,14 @@ class Corpus:
   documents: dict[str, Document]
   """The set of documents in the Corpus, keyed on name"""
 
+  @classmethod
+  def factory(cls, src: pathlib.Path) -> Corpus:
+    if isinstance(src, pathlib.Path): ...
+    else: raise TypeError(type(src))
+  
+  def save_document(self, name: str):
+    """Save the Document to Disk"""
+
 @dataclass
 class Document:
   """A Document in the Corpus"""
