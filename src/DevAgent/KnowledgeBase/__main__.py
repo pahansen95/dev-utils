@@ -6,7 +6,7 @@ K.I.S.S: Opt for the dumbest implementation first.
 
 """
 from __future__ import annotations
-import logging, pathlib, os, sys, tempfile, subprocess, shlex, re, hashlib, itertools, requests
+import logging, pathlib, os, sys, tempfile, subprocess, shlex, re, hashlib, itertools, requests, json, math
 from typing import Literal, Callable, TextIO, BinaryIO
 from collections import deque
 from collections.abc import Iterator
@@ -322,7 +322,7 @@ class SubCommand:
   def search_corpus(
     corpus_root: pathlib.Path,
     query: str,
-    threshold: float,
+    similarity: tuple[int, int],
   ) -> int:
     """Search the Knowledge Base for Information relevant to a query
 
@@ -335,15 +335,33 @@ class SubCommand:
       logger.exception(f'Failed to find the Corpus at {corpus_root.as_posix()}')
       return 1
     
-    if not (search_results := kb.Semantics.search(
+    logger.info(f'Search Similarity Bounds (Radians): {similarity}')
+    query_embedding, search_results = kb.Semantics.search(
       query=query,
       corpus=corpus,
-      threshold=threshold,
-    )):
+      similarity_bounds=similarity
+    )
+    if not search_results:
       logger.error(f'No Results Found for query: {query}')
       return 1
+    
+    # Extract the Results
+    snippets: dict[str, list[str]] = {}
+    for doc_name, doc_results in search_results.items():
+      logger.debug(f'Document: {doc_name}')
+      snippets[doc_name] = []
+      for result in doc_results:
+        logger.debug(f'Result Similarity (Radians): {result['metadata']["Similarity"]}')
+        read_start = result['metadata']['DocChunks'][0]['start']
+        read_chunk = result['metadata']['DocChunks'][0]['len']
+        logger.debug(f'Reading Document {doc_name} from {read_start} to {read_start+read_chunk}')
+        snippets[doc_name].append(''.join(corpus.read_document(doc_name, chunk=read_chunk, start=read_start, end=read_start+read_chunk)))
 
-    sys.stdout.write(str(search_results))
+    logger.info(f'Found {sum(map(len, search_results.values()))} Results accross {len(search_results)} Documents')
+    sys.stdout.write(json.dumps({
+      'query': query,
+      'results': snippets,
+    }))
     return 0
 
 def _parse_flag(flag: str) -> tuple[str, str]:
@@ -388,7 +406,19 @@ def main(argv: list[str], env: dict[str, str]) -> int:
     )
     elif action.lower() == 'validate': return SubCommand.validate_corpus(
       corpus_root=pathlib.Path(flags.get('kb', './KnowledgeBase')),
-    ) 
+    )
+    elif action.lower() == 'search':
+      degrees = args.popleft()
+      if ',' in degrees: degrees = tuple(map(float, degrees.split(',')))
+      else: degrees = (-1 * float(degrees), float(degrees))
+      query = args.popleft()
+      if query == '-': query = sys.stdin.read()
+      return SubCommand.search_corpus(
+        corpus_root=pathlib.Path(flags.get('kb', './KnowledgeBase')),
+        query=query,
+        # similarity=tuple(map(lambda x: x * (math.pi / 180), degrees)), # Convert Degrees to Radians
+        similarity=degrees,
+      )
     else: raise RuntimeError(f'Unknown Action for {subcmd}: {action}')
   else: raise RuntimeError(f'Unknown Subcommand: {subcmd}')
 

@@ -61,14 +61,14 @@ class _OpenAI(Backend):
     output: Backend.Cfg = {
       'url': urllib.parse.urlparse(os.environ.get('OPENAI_EMBED_ENDPOINT', 'https://api.openai.com/v1/embeddings')),
       'model': os.environ.get('OPENAI_EMBED_MODEL', 'text-embedding-3-large'),
-      'modelCfg': json.loads(os.environ.get('OPENAI_EMBED_MODEL_CFG', r'{}')),
+      'modelCfg': {
+        'output_dims': 3072, # See https://platform.openai.com/docs/models/embeddings
+        'output_dtype': 'float32',
+        'input_size': 8192, # No Authorative Reference; only normative comments
+      } | json.loads(os.environ.get('OPENAI_EMBED_MODEL_CFG', r'{}')),
       'httpHeaders': {
         'Authorization': f'Bearer {os.environ["OPENAI_API_KEY"]}',
       }
-    }
-    if not output['modelCfg']: output['modelCfg'] = {
-      'output_dims': 3072, # See https://platform.openai.com/docs/models/embeddings
-      'input_size': 8192, # No Authorative Reference; only normative comments
     }
     return cls(cfg=output)
 
@@ -97,14 +97,14 @@ class _AzureOpenAI(_OpenAI):
     output: Backend.Cfg = {
       'url': endpoint,
       'model': endpoint.path.split('/deployments/')[1].split('/')[0],
-      'modelCfg': json.loads(os.environ.get('AZURE_OPENAI_EMBED_MODEL_CFG', r'{}')),
+      'modelCfg': {
+        'output_dims': 3072, # See https://platform.openai.com/docs/models/embeddings
+        'output_dtype': 'float32',
+        'input_size': 8192, # No Authorative Reference; only normative comments
+      } | json.loads(os.environ.get('AZURE_OPENAI_EMBED_MODEL_CFG', r'{}')),
       'httpHeaders': {
         'api-key': os.environ['AZURE_OPENAI_API_KEY'],
       }
-    }
-    if not output['modelCfg']: output['modelCfg'] = {
-      'output_dims': 3072, # See https://platform.openai.com/docs/models/embeddings
-      'input_size': 8192, # No Authorative Reference; only normative comments
     }
     return cls(cfg=output)
 
@@ -135,7 +135,7 @@ class Embedding(TypedDict):
     return {
       'buffer': b''.join(embeds),
       'shape': (len(embeds), *kwargs['shape']),
-      'dtype': kwargs.get('dtype', 'float'),
+      'dtype': kwargs['dtype'], # Required
       'model': kwargs['model'], # Required
     } | (
       { 'metadata': kwargs['metadata'] } if 'metadata' in kwargs else {}
@@ -196,6 +196,7 @@ class EmbeddingInterface:
       if status.major == 2: return Embedding.factory(
         *self.backend.embed_extract_content(resp.read()),
         shape=(self.backend.cfg['modelCfg']['output_dims'],),
+        dtype=self.backend.cfg['modelCfg']['output_dtype'],
         model=self.backend.fully_qualified_name,
       )
       elif status.major in {4, 5}:

@@ -7,7 +7,7 @@ The KnowledgeBase Module provides the following Features:
 
 """
 from __future__ import annotations
-import pathlib, yaml, functools, time, itertools, logging, shutil, json, unicodedata, re, hashlib
+import pathlib, yaml, functools, time, itertools, logging, shutil, json, unicodedata, re, hashlib, math, struct
 from typing import Literal, TypedDict, Optional, Any
 from collections.abc import Iterable, Iterator, ByteString
 from dataclasses import dataclass
@@ -363,6 +363,23 @@ class Document:
 
 class Semantics:
 
+  ### NOTE These are Temporary Utils
+  
+  @staticmethod
+  def _dotproduct(l: ByteString, r: ByteString, bytesize: int) -> float:
+    """Calculate the DotProduct of two Float Vectors encoded as bytes"""
+    assert len(l) == len(r) and len(l) % bytesize == 0
+    if bytesize == 8: f = 'd'  # Double precision float
+    elif bytesize == 4: f = 'f'  # Single precision float
+    elif bytesize == 2: f = 'e'  # Half precision float
+    else: raise ValueError(bytesize)
+    return sum(
+      struct.unpack(f, l[i:i+bytesize])[0] * struct.unpack(f, r[i:i+bytesize])[0]
+      for i in range(0, len(l), bytesize)
+    )
+
+  ###
+
   @staticmethod
   def embed(*chunk: str) -> embed.Embedding:
     """Generate an Embedding for each chunk of text"""
@@ -452,7 +469,83 @@ My response will not include any special formatting.
   @staticmethod
   def search(
     query: str,
-    corpus: Corpus
-  ) -> ...:
+    corpus: Corpus,
+    similarity_bounds: tuple[float, float],
+  ) -> tuple[embed.Embedding, dict[str, list[embed.Embedding]]]:
     """Search a Corpus for Semantic Information related to a query"""
-    raise NotImplementedError
+    logger.debug(f"{similarity_bounds=}")
+    if not (
+      similarity_bounds[0] >= -1
+      and similarity_bounds[1] <= 1
+      and similarity_bounds[0] <= similarity_bounds[1]
+    ): raise ValueError(f'Invalid Similarity Bounds: Expected a range within [-1, 1]')
+
+    ### Generate an embedding for the Query
+
+    query_embed = embed.INTERFACE.embed(query)
+
+    ### "Search the Corpus" for similiar embeddings within the threshold; TODO: What does "Search" mean?
+
+    """A NOTE on "Searching the Corpus"
+    
+    - Different Embedding Model's have different dimensional represetnations so we can only compare against embeddings of the same model.
+    - We assume all embeddings are already normalized to distance of 1, so we can just use dot product to make the comparison.
+
+    A Naive implementation of a search is just to compute the dot product for every single embedding in the corpus.
+    This won't scale but should be fine to get us started.
+    Right now, the threshold is range of values to include; dot product will be in the range [-1, 1].
+    
+    A NOTE on calculating the Dot Product
+
+    This is just a "test it" implemenation; it's going to be really freaking slow.
+    We can calculate the dot product b/c these are unit vectors.
+    The Dot Product is the sum of the pairwise product of each vector component
+    Our Vectors are buffers, so we need to convert from their datatype first.
+
+    """
+    matches: dict[str, list[embed.Embedding]] = {}
+    """The Matching Embeddings, grouped by Document"""
+    for name, doc in corpus.documents.items():
+      matches[name] = []
+      for embedding_batch in doc.semantics['embeddings']:
+        assert embedding_batch['model'] == query_embed['model']
+        ### An Embedding is assumed to be a concatanated Batch of Embeddings.
+        assert len(embedding_batch) > 1
+        batch_size = embedding_batch['shape'][0]
+        assert batch_size > 0
+        if embedding_batch['dtype'] == 'float32': byte_size = 4 # 32 bits
+        elif embedding_batch['dtype'] == 'float16': byte_size = 2 # 16 bits
+        elif embedding_batch['dtype'] == 'float64': byte_size = 8 # 64 bits
+        else: raise ValueError(f'Unsupported Data Type: {embedding_batch["dtype"]}')
+        chunk_size = math.prod(embedding_batch['shape'][1:])
+        logger.debug(f'{batch_size=}, {chunk_size=}, {byte_size=}')
+        assert batch_size * chunk_size * byte_size == len(embedding_batch['buffer']), f'Expected {batch_size * chunk_size * byte_size} bytes, got {len(embedding_batch["buffer"])}'
+        chunk_bytes = chunk_size * byte_size
+        # for chunk_embedding in itertools.batched(embedding_batch['buffer'], chunk_bytes):
+        _batch_embedding = memoryview(embedding_batch['buffer'])
+        for i in range(0, len(_batch_embedding), chunk_bytes):
+          chunk_vector = _batch_embedding[i:i+chunk_bytes]
+          assert len(chunk_vector) == chunk_bytes
+          angle = Semantics._dotproduct(query_embed['buffer'], chunk_vector, byte_size)
+          logger.debug(f'Similarity Score: {angle}')
+          assert angle >= -1 and angle <= 1
+          if angle >= similarity_bounds[0] and angle <= similarity_bounds[1]:
+            # TODO: Concat Embeddings
+            matches[name].append(embed.Embedding.factory(
+              _batch_embedding,
+              shape=tuple(embedding_batch['shape'][1:]),
+              dtype=embedding_batch['dtype'],
+              model=embedding_batch['model'],
+              metadata={
+                'DocChunks': [ embedding_batch['metadata']['DocChunks'][i // chunk_bytes] ],
+                'Similarity': angle,
+              }
+            ))
+
+      if not matches[name]: matches.pop(name)
+
+    ### Return the results; TODO: What do we return exactly?
+    return (
+      query_embed,
+      matches
+    )
