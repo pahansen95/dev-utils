@@ -64,7 +64,7 @@ class SubCommands:
       else: raise ValueError(f'Unknown Role: {role}')
       return { 'role': role, 'content': msg['content'] }
     def _llm_chat() -> Chat.Message: return Chat.Message.factory(
-      publisher=f'agent:llm:{llm.MODEL_PROVIDER}:{llm.MODEL_ID}',
+      publisher=f'agent:llm:{llm.PROVIDER}:{llm.MODEL_ID}',
       content=llm.chat(
         system_prompt,
         { 'role': 'user', 'content': Ctx.render(_load_chat_ctx()) },
