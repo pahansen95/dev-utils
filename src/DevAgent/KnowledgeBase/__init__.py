@@ -223,6 +223,7 @@ class Document:
     assert parent.exists()
     if not (parent / self.root / 'content').exists(): raise ValueError('Document has no content')
     if end is None: end = self.content_size(parent)
+    assert end <= self.content_size(parent), f'Want {end} but max is {self.content_size(parent)}'
     logger.debug(f'Reading `{self.metadata["document_kind"]}` Document: {self.metadata["name"]}, Start: {start}, End: {end}, Chunk: {chunk}')
     if self.metadata['document_kind'] == 'text': return self._read_text(parent, start, end, chunk)
     else: raise NotImplementedError(f"Unsupported Document Kind: {self.metadata['document_kind']}")
@@ -230,9 +231,13 @@ class Document:
   def _read_text(self, parent: pathlib.Path, start: int, end: int, chunk: int) -> Iterator[str]:
     assert parent.exists()
     with (parent / self.root / 'content/blob.txt').open('r') as f:
+      logger.debug(f'{start=}')
       f.seek(start)
-      while f.tell() < end:
-        yield f.read(chunk)
+      idx = 0
+      while (pos := f.tell()) < end:
+        logger.debug(f'{idx=}: {pos=}, {end=}')
+        yield f.read(min(chunk, end - pos))
+        idx += 1
   
   def slurp(self, parent: pathlib.Path) -> bytes:
     """Read the entire Document into memory"""
@@ -363,23 +368,6 @@ class Document:
 
 class Semantics:
 
-  ### NOTE These are Temporary Utils
-  
-  @staticmethod
-  def _dotproduct(l: ByteString, r: ByteString, bytesize: int) -> float:
-    """Calculate the DotProduct of two Float Vectors encoded as bytes"""
-    assert len(l) == len(r) and len(l) % bytesize == 0
-    if bytesize == 8: f = 'd'  # Double precision float
-    elif bytesize == 4: f = 'f'  # Single precision float
-    elif bytesize == 2: f = 'e'  # Half precision float
-    else: raise ValueError(bytesize)
-    return sum(
-      struct.unpack(f, l[i:i+bytesize])[0] * struct.unpack(f, r[i:i+bytesize])[0]
-      for i in range(0, len(l), bytesize)
-    )
-
-  ###
-
   @staticmethod
   def embed(*chunk: str) -> embed.Embedding:
     """Generate an Embedding for each chunk of text"""
@@ -471,7 +459,7 @@ My response will not include any special formatting.
     query: str,
     corpus: Corpus,
     similarity_bounds: tuple[float, float],
-  ) -> tuple[embed.Embedding, dict[str, list[embed.Embedding]]]:
+  ) -> tuple[embed.Embedding, dict[str, embed.Embedding]]:
     """Search a Corpus for Semantic Information related to a query"""
     logger.debug(f"{similarity_bounds=}")
     if not (
@@ -480,11 +468,21 @@ My response will not include any special formatting.
       and similarity_bounds[0] <= similarity_bounds[1]
     ): raise ValueError(f'Invalid Similarity Bounds: Expected a range within [-1, 1]')
 
-    ### Generate an embedding for the Query
+    ### Generate an embedding for the Query & Pre-Compute Some of the DeSerializing Bits
 
     query_embed = embed.INTERFACE.embed(query)
+    assert query_embed['shape'][0] == 1 # Batch Size 1
+    bytesize, f = embed._VEC_DTYPE[query_embed['dtype']]
+    vec_size, err = divmod(len(query_embed['buffer']), bytesize)
+    vec_bytesize = len(query_embed['buffer'])
+    if err: raise RuntimeError(f"Query Embedding declares a data type of {query_embed['dtype']} but it's size is not a multiple of {bytesize}")
+    vec_fmt = f'{vec_size}{f}'.encode() # N Floats
+    logger.debug(f'{vec_size=}, {vec_bytesize=}, {bytesize=}, {vec_fmt=}')
+    query_vec: embed._vector_t = struct.unpack(vec_fmt, query_embed['buffer'])
+    _vec_magn = sum(x**2 for x in query_vec)
+    assert math.isclose(1.0, _vec_magn, rel_tol=1e6), f'Embedding is not a Unit Vector: {_vec_magn}'
 
-    ### "Search the Corpus" for similiar embeddings within the threshold; TODO: What does "Search" mean?
+    ### "Search the Corpus" for similiar embeddings within the threshold
 
     """A NOTE on "Searching the Corpus"
     
@@ -503,46 +501,57 @@ My response will not include any special formatting.
     Our Vectors are buffers, so we need to convert from their datatype first.
 
     """
-    matches: dict[str, list[embed.Embedding]] = {}
+    matches: dict[str, embed.Embedding] = {}
     """The Matching Embeddings, grouped by Document"""
     for name, doc in corpus.documents.items():
-      matches[name] = []
+      ### Collect all Matching embeddings for the Doc
+      matching_embeds: list[ByteString] = []
+      matching_embeds_metadata = {
+        'DocChunks': [],
+        'Similarity': []
+      }
       for embedding_batch in doc.semantics['embeddings']:
         assert embedding_batch['model'] == query_embed['model']
-        ### An Embedding is assumed to be a concatanated Batch of Embeddings.
-        assert len(embedding_batch) > 1
+        assert embedding_batch['shape'][1] == query_embed['shape'][1]
+        assert embedding_batch['dtype'] == query_embed['dtype']
         batch_size = embedding_batch['shape'][0]
         assert batch_size > 0
-        if embedding_batch['dtype'] == 'float32': byte_size = 4 # 32 bits
-        elif embedding_batch['dtype'] == 'float16': byte_size = 2 # 16 bits
-        elif embedding_batch['dtype'] == 'float64': byte_size = 8 # 64 bits
-        else: raise ValueError(f'Unsupported Data Type: {embedding_batch["dtype"]}')
-        chunk_size = math.prod(embedding_batch['shape'][1:])
-        logger.debug(f'{batch_size=}, {chunk_size=}, {byte_size=}')
-        assert batch_size * chunk_size * byte_size == len(embedding_batch['buffer']), f'Expected {batch_size * chunk_size * byte_size} bytes, got {len(embedding_batch["buffer"])}'
-        chunk_bytes = chunk_size * byte_size
-        # for chunk_embedding in itertools.batched(embedding_batch['buffer'], chunk_bytes):
-        _batch_embedding = memoryview(embedding_batch['buffer'])
-        for i in range(0, len(_batch_embedding), chunk_bytes):
-          chunk_vector = _batch_embedding[i:i+chunk_bytes]
-          assert len(chunk_vector) == chunk_bytes
-          angle = Semantics._dotproduct(query_embed['buffer'], chunk_vector, byte_size)
+        logger.debug(f'{batch_size=}, {vec_size=}, {bytesize=}')
+        assert batch_size * vec_size * bytesize == len(embedding_batch['buffer']), f'Expected {batch_size * vec_size * bytesize} bytes, got {len(embedding_batch["buffer"])}'
+        embed_vec_batch = memoryview(embedding_batch['buffer'])
+        for i in range(0, len(embed_vec_batch), vec_bytesize):
+          # chunk_vector = _batch_embedding[i:i+chunk_bytes]
+          # assert len(chunk_vector) == chunk_bytes
+          # angle = Semantics._dotproduct(query_embed['buffer'], chunk_vector, bytesize, fmt)
+          # chunk_vec = Semantics._unpack_vector(vec_fmt, _batch_embedding[i:i+vec_bytesize])
+          ebmed_vec: embed._vector_t = struct.unpack(vec_fmt, embed_vec_batch[i:i+vec_bytesize])
+          angle = math.sumprod(query_vec, ebmed_vec) # Dot Product
           logger.debug(f'Similarity Score: {angle}')
           assert angle >= -1 and angle <= 1
-          if angle >= similarity_bounds[0] and angle <= similarity_bounds[1]:
-            # TODO: Concat Embeddings
-            matches[name].append(embed.Embedding.factory(
-              _batch_embedding,
-              shape=tuple(embedding_batch['shape'][1:]),
-              dtype=embedding_batch['dtype'],
-              model=embedding_batch['model'],
-              metadata={
-                'DocChunks': [ embedding_batch['metadata']['DocChunks'][i // chunk_bytes] ],
-                'Similarity': angle,
-              }
-            ))
-
-      if not matches[name]: matches.pop(name)
+          # Short Circuit if angle out of bounds
+          if not (angle >= similarity_bounds[0] and angle <= similarity_bounds[1]): continue
+          matching_embeds.append(embed_vec_batch[i:i+vec_bytesize])
+          matching_embeds_metadata['DocChunks'].append(embedding_batch['metadata']['DocChunks'][i // vec_bytesize])
+          matching_embeds_metadata['Similarity'].append(angle)
+          ### NOTE: OLD Implementation
+          # matches[name].append(embed.Embedding.factory(
+          #   _batch_embedding,
+          #   shape=tuple(embedding_batch['shape'][1:]),
+          #   dtype=embedding_batch['dtype'],
+          #   model=embedding_batch['model'],
+          #   metadata={
+          #     'DocChunks': [ embedding_batch['metadata']['DocChunks'][i // chunk_bytes] ],
+          #     'Similarity': angle,
+          #   }
+          # ))
+        
+      if matching_embeds: matches[name] = embed.Embedding.factory(
+        *matching_embeds, # Will be concatenated
+        shape=(vec_size,), # Just the shape of a single Vector
+        dtype=query_embed['dtype'],
+        model=query_embed['model'],
+        metadata=matching_embeds_metadata,
+      )
 
     ### Return the results; TODO: What do we return exactly?
     return (

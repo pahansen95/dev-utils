@@ -7,9 +7,9 @@ TODO: Refactor the Client & Backend Implementations
 """
 from __future__ import annotations
 from dataclasses import dataclass, KW_ONLY, field
-from typing import TypedDict, Optional, Any
+from typing import TypedDict, Optional, Any, NamedTuple
 from collections.abc import Iterable, Callable, ByteString
-import http.client, urllib.parse, os, json, logging, ssl, threading, weakref, base64, yaml
+import http.client, urllib.parse, os, json, logging, ssl, threading, weakref, base64, yaml, struct, math
 
 from .._utils.http import ConnectionProxy, HTTPStatus, HTTPConnection, HTTPResponse
 
@@ -132,6 +132,13 @@ class Embedding(TypedDict):
   def factory(*embeds: ByteString, **kwargs) -> Embedding:
     """Creates an Embedding Batch from those provided. Assumes each embedding in `embeds` is of the same shape & dtype"""
     # TODO: Make this smarter; maybe just use Numpy
+    assert len(kwargs['shape']) == 1 # Only supports Vectors currently
+    dims = kwargs['shape'][0]
+    assert kwargs['dtype'] in _VEC_DTYPE
+    bytesize, _ = _VEC_DTYPE[kwargs['dtype']]
+    assert all(len(e) == len(embeds[0]) for e in embeds)
+    _dims, err = divmod(len(embeds[0]), bytesize)
+    assert not err and _dims == dims, f'{dims=}, {_dims=}, {err}'
     return {
       'buffer': b''.join(embeds),
       'shape': (len(embeds), *kwargs['shape']),
@@ -139,6 +146,23 @@ class Embedding(TypedDict):
       'model': kwargs['model'], # Required
     } | (
       { 'metadata': kwargs['metadata'] } if 'metadata' in kwargs else {}
+    )
+
+  @staticmethod
+  def unpack(embedding: Embedding) -> list[_vector_t]:
+    """Reference Implementation to unpack a Batched Embedding into a list of float vectors"""
+    dtype = _VEC_DTYPE[embedding['dtype']]
+    assert len(embedding['shape']) == 2 # Only support Batched Vectors
+    batch_size, vec_size = embedding['shape']
+    vec_bytesize = vec_size * dtype.bytesize
+    _batch_size, err = divmod(len(embedding['buffer']), vec_bytesize)
+    assert not err, 'Malformed Embedding'
+    assert batch_size == _batch_size, f'Expected {batch_size} but got {_batch_size}'
+    format = f"{vec_size}{dtype.format}"
+    buffer = memoryview(embedding['buffer'])
+    return list(
+      struct.unpack(format, buffer[i:i+vec_bytesize])
+      for i in range(0, len(buffer), vec_bytesize)
     )
   
   @staticmethod
@@ -193,8 +217,9 @@ class EmbeddingInterface:
       resp: HTTPResponse = self.conn.getresponse()
       # logger.debug(f'Embedding HTTP Headers...\n{json.dumps(dict(resp.getheaders()), indent=2)}')
       status = HTTPStatus.factory(resp.status)
+      embed_vecs = self.backend.embed_extract_content(resp.read())
       if status.major == 2: return Embedding.factory(
-        *self.backend.embed_extract_content(resp.read()),
+        *embed_vecs,
         shape=(self.backend.cfg['modelCfg']['output_dims'],),
         dtype=self.backend.cfg['modelCfg']['output_dtype'],
         model=self.backend.fully_qualified_name,
@@ -203,4 +228,15 @@ class EmbeddingInterface:
         logger.error(f"Failed to Embed Text: {resp.status} {resp.reason}")
       else: raise NotImplementedError(f"Unhandled HTTP Status: {status}")
 
+### NOTE: Temporary Embedding Vector Helpers
+_vector_t = tuple[float, ...]
+class _DTYPE(NamedTuple):
+  bytesize: int
+  format: str
+_VEC_DTYPE: dict[str, _DTYPE] = {
+  'float64': _DTYPE(8, 'd'),
+  'float32': _DTYPE(4, 'f'),
+  'float16': _DTYPE(2, 'e')
+}
+###
 INTERFACE = EmbeddingInterface.factory(BACKEND.factory)

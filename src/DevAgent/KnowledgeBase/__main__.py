@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging, pathlib, os, sys, tempfile, subprocess, shlex, re, hashlib, itertools, requests, json, math
 from typing import Literal, Callable, TextIO, BinaryIO
 from collections import deque
-from collections.abc import Iterator
+from collections.abc import Iterator, Iterable
 
 logger = logging.getLogger(__name__)
 is_stdin_tty = os.isatty(sys.stdin.fileno())
@@ -158,18 +158,28 @@ class SubCommand:
       batch_size
     )):
       assert isinstance(chunks, tuple) and all(isinstance(c, str) for c in chunks)
-      logger.info(f'Processing Batch {idx+1}')
+      logger.info(f'Processing Batch {idx+1}: {len(chunks)} Chunks')
       chunk_embeds = kb.Semantics.embed(*chunks)
+      assert chunk_embeds['shape'][0] == len(chunks), f'Expected {len(chunks)} Embeddings but got {chunk_embeds['shape'][0]}'
+      _embed_vecs = kb.embed.Embedding.unpack(chunk_embeds)
+      assert len(_embed_vecs) == len(chunks)
+      assert all(math.isclose(
+        1.0,
+        sum(x**2 for x in vec),
+        rel_tol=1e6
+      ) for vec in _embed_vecs), f'Embedding is not a Unit Vector '
+
       ### NOTE: We need to track what chunk each embedding correlates to
-      ### To calculate the starting & ending Index of each chunk in the batch
-      ### We nee
       chunk_indices: list[dict[str, int]] = []
-      for _ in range(len(chunks)):
+      for c_i , chunk in enumerate(chunks):
+        chunk_bytesize = len(chunk)
+        assert doc_idx + chunk_bytesize - 1 < corpus.documents[document_name].content_size(corpus.root), f"{doc_idx + chunk_bytesize - 1} > {corpus.documents[document_name].content_size(corpus.root)}"
+        # TODO: Off by 1 error
         chunk_indices.append({
           'start': doc_idx,
-          'len': chunk_size,
+          'len': chunk_bytesize,
         })
-        doc_idx += chunk_size
+        doc_idx += chunk_bytesize
       chunk_embeds['metadata'] = {
         'DocChunks': chunk_indices
       }
@@ -344,18 +354,29 @@ class SubCommand:
     if not search_results:
       logger.error(f'No Results Found for query: {query}')
       return 1
+    logger.debug(f'Found {sum(map(len, search_results.values()))} Results accross {len(search_results)} Documents')
     
     # Extract the Results
+    # TODO: Sort the Document's by median similarity score in descending order 
     snippets: dict[str, list[str]] = {}
     for doc_name, doc_results in search_results.items():
+      assert isinstance(doc_results, dict)
       logger.debug(f'Document: {doc_name}')
       snippets[doc_name] = []
-      for result in doc_results:
-        logger.debug(f'Result Similarity (Radians): {result['metadata']["Similarity"]}')
-        read_start = result['metadata']['DocChunks'][0]['start']
-        read_chunk = result['metadata']['DocChunks'][0]['len']
-        logger.debug(f'Reading Document {doc_name} from {read_start} to {read_start+read_chunk}')
-        snippets[doc_name].append(''.join(corpus.read_document(doc_name, chunk=read_chunk, start=read_start, end=read_start+read_chunk)))
+      sorted_results_idx: list[int] = list(sorted(
+        range(len(doc_results['metadata']['Similarity'])),
+        key=lambda idx: doc_results['metadata']['Similarity'][idx], # Compare the Similarities; 1: Most Similiar, 0: Orthogonal (aka related), -1: Most Disimiliar
+        reverse=True, # Sort Largest to Smallest (Descending)
+      ))
+      assert doc_results['metadata']['Similarity'][sorted_results_idx[0]] >= doc_results['metadata']['Similarity'][sorted_results_idx[-1]]
+      logger.debug(f'Sorted Search Results (by Index) for Document `{doc_name}`: {sorted_results_idx}')
+      for idx in sorted_results_idx:
+        logger.debug(f'Result Similarity (Radians): {doc_results['metadata']["Similarity"][idx]}')
+        assert doc_results['shape'][0] > 0, doc_results['shape']
+        read_start = doc_results['metadata']['DocChunks'][idx]['start']
+        read_chunk = doc_results['metadata']['DocChunks'][idx]['len']
+        logger.debug(f'Reading Document {doc_name} from {read_start} to {read_start+read_chunk-1}')
+        snippets[doc_name].append(''.join(corpus.read_document(doc_name, chunk=read_chunk, start=read_start, end=read_start+read_chunk-1)))
 
     logger.info(f'Found {sum(map(len, search_results.values()))} Results accross {len(search_results)} Documents')
     sys.stdout.write(json.dumps({
@@ -408,8 +429,9 @@ def main(argv: list[str], env: dict[str, str]) -> int:
       corpus_root=pathlib.Path(flags.get('kb', './KnowledgeBase')),
     )
     elif action.lower() == 'search':
-      degrees = args.popleft()
-      if ',' in degrees: degrees = tuple(map(float, degrees.split(',')))
+      logger.debug(args)
+      degrees = args.popleft().strip()
+      if degrees.startswith('['): degrees = tuple(json.loads(degrees))
       else: degrees = (-1 * float(degrees), float(degrees))
       query = args.popleft()
       if query == '-': query = sys.stdin.read()
