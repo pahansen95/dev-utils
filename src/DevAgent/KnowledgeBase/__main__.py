@@ -376,7 +376,7 @@ class SubCommand:
         read_start = doc_results['metadata']['DocChunks'][idx]['start']
         read_chunk = doc_results['metadata']['DocChunks'][idx]['len']
         logger.debug(f'Reading Document {doc_name} from {read_start} to {read_start+read_chunk-1}')
-        snippets[doc_name].append(''.join(corpus.read_document(doc_name, chunk=read_chunk, start=read_start, end=read_start+read_chunk-1)))
+        snippets[doc_name].append({'text': ''.join(corpus.read_document(doc_name, chunk=read_chunk, start=read_start, end=read_start+read_chunk-1)), 'sim': doc_results['metadata']['Similarity'][idx] })
 
     logger.info(f'Found {sum(map(len, search_results.values()))} Results accross {len(search_results)} Documents')
     sys.stdout.write(json.dumps({
@@ -423,7 +423,7 @@ def main(argv: list[str], env: dict[str, str]) -> int:
       doc_name=args.popleft(),
       doc_kind=args.popleft(),
       doc_src=(lambda a: 'fd:0' if a == '-' else a)(args.popleft()),
-      doc_prefix=args.popleft() if args else None,
+      doc_prefix=pathlib.Path(args.popleft()) if args else None,
     )
     elif action.lower() == 'validate': return SubCommand.validate_corpus(
       corpus_root=pathlib.Path(flags.get('kb', './KnowledgeBase')),

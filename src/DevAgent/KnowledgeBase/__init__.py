@@ -55,7 +55,7 @@ class Corpus:
   def init_document(corpus_root: pathlib.Path, doc: Document):
     logger.debug(f'Initializing the Document: {doc.metadata["name"]}')
     assert corpus_root.exists()
-    (doc_root := corpus_root / doc.root).mkdir(mode=0o755, exist_ok=True)
+    (doc_root := corpus_root / doc.root).mkdir(mode=0o755, exist_ok=True, parents=True)
     (kind_file := doc_root / '.kind').touch(mode=0o755, exist_ok=True)
     kind_file.write_text(Document.__name__)
 
@@ -109,8 +109,8 @@ class Corpus:
     Corpus.init_document(self.root, doc)
     Corpus.save_document_data(self.root, doc)
     logger.debug(f'Document{name}: Writing Content')
-    if isinstance(data, ByteString): doc_size = doc.dump(data)
-    elif isinstance(data, Iterator): doc_size = doc.write(data)
+    if isinstance(data, ByteString): doc_size = doc.dump(self.root, data)
+    elif isinstance(data, Iterator): doc_size = doc.write(self.root, data)
     else: raise TypeError(type(data))
     logger.debug(f'Document {name}: Byte Size: {doc_size}')
 
