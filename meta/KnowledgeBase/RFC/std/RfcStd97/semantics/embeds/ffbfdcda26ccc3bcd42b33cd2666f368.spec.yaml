@@ -1,0 +1,25 @@
+kind: Embedding
+spec:
+  dtype: float32
+  model: AzureOpenAI:text-embedding-3-large
+  metadata:
+    DocChunks:
+    - start: 483328
+      len: 1024
+    - start: 484352
+      len: 1024
+    - start: 485376
+      len: 1024
+    - start: 486400
+      len: 1024
+    - start: 487424
+      len: 1024
+    - start: 488448
+      len: 1024
+    - start: 489472
+      len: 1024
+    - start: 490496
+      len: 1024
+  shape:
+  - 8
+  - 3072
