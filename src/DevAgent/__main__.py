@@ -33,13 +33,14 @@ class SubCommands:
     """
     if not is_stdin_tty: raise RuntimeError('Interactive Chat is only supported in TTY Mode')
 
-    from . import tui, Ctx, Chat, Git, llm
+    from . import tui, Chat, Git, llm, AgentCtx
+    from .AgentCtx import CtxUtils
 
     GIT_WORKTREE = pathlib.Path(os.environ.get('WORK_DIR'))
     
     if not (chat_ctx_file := pathlib.Path(chat_ctx_src)).exists(): raise RuntimeError(f'File Not Found: {chat_ctx_src}')
-    def _load_chat_ctx() -> Ctx.Spec: return Ctx.load(chat_ctx_file)
-    logger.debug(f'Example Chat Context...\n{_load_chat_ctx()}')
+    _load_chat_ctx = AgentCtx.load_spec_factory(chat_ctx_file)
+    logger.debug(f'Example Chat Context...\n{CtxUtils.render_ctx(_load_chat_ctx())}')
 
     system_prompt = llm.SYSTEM_PROMPT_MSG # TODO: Make Customizable
 
@@ -67,7 +68,7 @@ class SubCommands:
       publisher=f'agent:llm:{llm.PROVIDER}:{llm.MODEL_ID}',
       content=llm.chat(
         system_prompt,
-        { 'role': 'user', 'content': Ctx.render(_load_chat_ctx()) },
+        { 'role': 'user', 'content': CtxUtils.render_ctx(_load_chat_ctx()) },
         { 'role': 'assistant', 'content': 'I will consult the provided context.' }, # Maintain the User/Assistant turn taking
         *map(_chat_msg_to_llm_msg, chat_log['log'])
       ),

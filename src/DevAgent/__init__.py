@@ -127,175 +127,175 @@ class Git:
     subprocess.run(['git', 'add', *pathspecs], check=True, cwd=worktree.as_posix())
     subprocess.run(['git', 'commit', '-m', msg, *pathspecs], check=True, cwd=worktree.as_posix())
 
-class Ctx:
-  """Semantic Type for a Project Context
+# class Ctx:
+#   """Semantic Type for a Project Context
 
-  Project Context is used to provide some Relevant Information about the Project to the DevAgent.
+#   Project Context is used to provide some Relevant Information about the Project to the DevAgent.
 
-  A Context can consist of:
-    - Project README
-    - Project Source...
-      - The Directory Tree
-      - Individual Files whose content will be injected
-    - Project Documentation... TODO
-    - Knowledge Base... TODO
-  """
+#   A Context consists of:
+#     - Project README
+#     - Project Source...
+#       - The Directory Tree
+#       - Individual Files whose content will be injected
+#     - Project Documentation... TODO
+#     - Knowledge Base... TODO
+#   """
 
-  @staticmethod
-  def load(filepath: pathlib.Path) -> Ctx.Spec:
-    """Load a Project Context Module from a File & then call the `spec_factorty` function to get the Context Specification"""
-    module_spec = importlib.util.spec_from_file_location('spec_module', filepath)
-    module = importlib.util.module_from_spec(module_spec)
-    module_spec.loader.exec_module(module)
-    return module.spec_factory()
+#   @staticmethod
+#   def load(filepath: pathlib.Path) -> Ctx.Spec:
+#     """Load a Project Context Module from a File & then call the `spec_factorty` function to get the Context Specification"""
+#     module_spec = importlib.util.spec_from_file_location('spec_module', filepath)
+#     module = importlib.util.module_from_spec(module_spec)
+#     module_spec.loader.exec_module(module)
+#     return module.spec_factory()
 
-  @staticmethod
-  def render(spec: Ctx.Spec) -> str:
-    """Render a Project Context Specification into a Human Readable Document"""
+#   @staticmethod
+#   def render(spec: Ctx.Spec) -> str:
+#     """Render a Project Context Specification into a Human Readable Document"""
 
-    def _render_tree(tree: dict[str, dict | str]) -> str:
-      """Render a Directory Tree into a Deeply Nested Markdown List"""
-      o = ""
-      class _Node(TypedDict):
-        depth: int
-        prefix: str
-        tree: dict[str, dict | str]
-      stack: deque[_Node] = deque([{ 'depth': 0, 'prefix': '', 'tree': tree }])
-      htab = lambda depth: '  ' * depth
-      while stack:
-        node = stack.popleft()
-        if (node['depth'] - 1) >= 0: o += f"{htab(node['depth'] - 1)}- `{node['prefix'].rstrip('/')}/`\n"
-        for name, child in sorted(node['tree'].items(), key=lambda x: x[0]):
-          assert isinstance(child, (dict, str)), type(child)
-          # child_path = node['prefix'].rstrip('/') + '/' + name
-          if isinstance(child, str): o += f"{htab(node['depth'])}- `{name}`\n"
-          else: stack.append({ 'depth': node['depth'] + 1, 'prefix': name, 'tree': child })
-      return o.strip()
+#     def _render_tree(tree: dict[str, dict | str]) -> str:
+#       """Render a Directory Tree into a Deeply Nested Markdown List"""
+#       o = ""
+#       class _Node(TypedDict):
+#         depth: int
+#         prefix: str
+#         tree: dict[str, dict | str]
+#       stack: deque[_Node] = deque([{ 'depth': 0, 'prefix': '', 'tree': tree }])
+#       htab = lambda depth: '  ' * depth
+#       while stack:
+#         node = stack.popleft()
+#         if (node['depth'] - 1) >= 0: o += f"{htab(node['depth'] - 1)}- `{node['prefix'].rstrip('/')}/`\n"
+#         for name, child in sorted(node['tree'].items(), key=lambda x: x[0]):
+#           assert isinstance(child, (dict, str)), type(child)
+#           # child_path = node['prefix'].rstrip('/') + '/' + name
+#           if isinstance(child, str): o += f"{htab(node['depth'])}- `{name}`\n"
+#           else: stack.append({ 'depth': node['depth'] + 1, 'prefix': name, 'tree': child })
+#       return o.strip()
     
-    def _render_file(filepath: str, content: str) -> str:
-      codeblock = '```'
-      if filepath.endswith(('.md', '.markdown')):
-        codeblock = '````'
-        codekind = 'Markdown'
-      elif filepath.endswith(('.py', '.pyi', '.pyc')): codekind = 'Python'
-      elif filepath.endswith(('.ebnf', '.bnf')): codekind = 'EBNF'
-      elif filepath.endswith(('.x', '.langx')): codekind = 'LangX'
-      elif filepath.endswith(('.json', '.jsonl')): codekind = 'JSON'
-      elif filepath.endswith(('.yaml', '.yml')): codekind = 'YAML'
-      elif filepath.endswith(('.sh', '.bash', '.zsh')): codekind = 'Shell'
-      elif filepath.endswith(('.ps1',)): codekind = 'PowerShell'
-      else: codekind = 'Plaintext'
-      return f"""
-### {filepath}
+#     def _render_file(filepath: str, content: str) -> str:
+#       codeblock = '```'
+#       if filepath.endswith(('.md', '.markdown')):
+#         codeblock = '````'
+#         codekind = 'Markdown'
+#       elif filepath.endswith(('.py', '.pyi', '.pyc')): codekind = 'Python'
+#       elif filepath.endswith(('.ebnf', '.bnf')): codekind = 'EBNF'
+#       elif filepath.endswith(('.x', '.langx')): codekind = 'LangX'
+#       elif filepath.endswith(('.json', '.jsonl')): codekind = 'JSON'
+#       elif filepath.endswith(('.yaml', '.yml')): codekind = 'YAML'
+#       elif filepath.endswith(('.sh', '.bash', '.zsh')): codekind = 'Shell'
+#       elif filepath.endswith(('.ps1',)): codekind = 'PowerShell'
+#       else: codekind = 'Plaintext'
+#       return f"""
+# ### {filepath}
 
-{codeblock}{codekind}
-{content}
-{codeblock}
-""".strip()
+# {codeblock}{codekind}
+# {content}
+# {codeblock}
+# """.strip()
     
-    def _render_src_files(tree: dict[str, dict | str]) -> Generator[str, None, None]:
-      """Sequentially Render the Source Files"""
-      class _Node(TypedDict):
-        prefix: str
-        tree: dict[str, dict | str]
-      stack: deque[_Node] = deque([{ 'prefix': '/', 'tree': tree }])
-      while stack:
-        node = stack.popleft()
-        for name, child in node['tree'].items():
-          assert isinstance(child, (dict, str)), type(child)
-          child_path = node['prefix'].rstrip('/') + '/' + name
-          if isinstance(child, str):
-            if child: yield _render_file(child_path, child)
-          else: stack.append({ 'prefix': child_path, 'tree': child })
+#     def _render_src_files(tree: dict[str, dict | str]) -> Generator[str, None, None]:
+#       """Sequentially Render the Source Files"""
+#       class _Node(TypedDict):
+#         prefix: str
+#         tree: dict[str, dict | str]
+#       stack: deque[_Node] = deque([{ 'prefix': '/', 'tree': tree }])
+#       while stack:
+#         node = stack.popleft()
+#         for name, child in node['tree'].items():
+#           assert isinstance(child, (dict, str)), type(child)
+#           child_path = node['prefix'].rstrip('/') + '/' + name
+#           if isinstance(child, str):
+#             if child: yield _render_file(child_path, child)
+#           else: stack.append({ 'prefix': child_path, 'tree': child })
 
-    def _render_file_map(file_map: dict[pathlib.Path, str]) -> str:
-      """Sequentially Render the Files in the File Map"""
-      return '\n\n'.join([_render_file(p.as_posix(), c) for p, c in file_map.items()])
+#     def _render_file_map(file_map: dict[pathlib.Path, str]) -> str:
+#       """Sequentially Render the Files in the File Map"""
+#       return '\n\n'.join([_render_file(p.as_posix(), c) for p, c in file_map.items()])
 
-    def _render_stats(stats: dict[str, str]) -> str:
-      return '\n'.join([f'### {stat}\n\n```plaintext\n{value}\n```\n' for stat, value in stats.items()]).strip()
+#     def _render_stats(stats: dict[str, str]) -> str:
+#       return '\n'.join([f'### {stat}\n\n```plaintext\n{value}\n```\n' for stat, value in stats.items()]).strip()
 
-    return f"""
-# Context
+#     return f"""
+# # Context
 
-## About the Project
+# ## About the Project
 
-### README
+# ### README
 
-`````markdown
-{spec['about']['Project']['README'].strip()}
-`````
+# `````markdown
+# {spec['about']['Project']['README'].strip()}
+# `````
 
-## Python Stats
+# ## Python Stats
 
-{_render_stats(spec['about']['Python']).strip()}
+# {_render_stats(spec['about']['Python']).strip()}
 
-## Git Stats
+# ## Git Stats
 
-{_render_stats(spec['about']['Git']).strip()}
+# {_render_stats(spec['about']['Git']).strip()}
 
-## Knowledge Base
+# ## Knowledge Base
 
-{_render_file_map(spec['kb']).strip()}
+# {_render_file_map(spec['kb']).strip()}
 
-## Project Source
+# ## Project Source
 
-### Source Tree
+# ### Source Tree
 
-{_render_tree(spec['src']).strip()}
+# {_render_tree(spec['src']).strip()}
 
-### Source Files
+# ### Source Files
 
-{'\n\n'.join(_render_src_files(spec['src'])).strip()}
+# {'\n\n'.join(_render_src_files(spec['src'])).strip()}
 
-""".strip() + '\n' # Markdown Spec says to end with a newline
+# """.strip() + '\n' # Markdown Spec says to end with a newline
 
-  class Spec(TypedDict):
-    about: Ctx.Spec.About
-    """The Project Metadata"""
-    src: dict[str, dict | str]
-    """The Project Source organized as a Directory Tree"""
-    kb: dict[str, str]
-    """Project Knowledge Base as a simple Mapping of Path to Content"""
+#   class Spec(TypedDict):
+#     about: Ctx.Spec.About
+#     """The Project Metadata"""
+#     src: dict[str, dict | str]
+#     """The Project Source organized as a Directory Tree"""
+#     kb: dict[str, str]
+#     """Project Knowledge Base as a simple Mapping of Path to Content"""
 
-    class About(TypedDict):
-      """Metadata about the Project"""
-      Project: Ctx.Spec.About.ProjectStats
-      Python: Ctx.Spec.About.PythonStats
-      Git: Ctx.Spec.About.GitStats
+#     class About(TypedDict):
+#       """Metadata about the Project"""
+#       Project: Ctx.Spec.About.ProjectStats
+#       Python: Ctx.Spec.About.PythonStats
+#       Git: Ctx.Spec.About.GitStats
 
-      class ProjectStats(TypedDict):
-        README: str
+#       class ProjectStats(TypedDict):
+#         README: str
 
-        @staticmethod
-        def factory(worktree: pathlib.Path) -> Ctx.Spec.About.ProjectStats:
-          return {
-            'README': (worktree / 'README.md').read_text(),
-          }
+#         @staticmethod
+#         def factory(worktree: pathlib.Path) -> Ctx.Spec.About.ProjectStats:
+#           return {
+#             'README': (worktree / 'README.md').read_text(),
+#           }
 
-      class PythonStats(TypedDict):
-        Version: str
+#       class PythonStats(TypedDict):
+#         Version: str
 
-        @staticmethod
-        def factory(worktree: pathlib.Path) -> Ctx.Spec.About.PythonStats:
-          return {
-            'Version': subprocess.run(['python', '--version'], check=True, capture_output=True).stdout.decode().strip(),
-          }
+#         @staticmethod
+#         def factory(worktree: pathlib.Path) -> Ctx.Spec.About.PythonStats:
+#           return {
+#             'Version': subprocess.run(['python', '--version'], check=True, capture_output=True).stdout.decode().strip(),
+#           }
 
-      class GitStats(TypedDict):
-        Version: str
-        Branches: str
-        Log: str
-        HEAD: str
+#       class GitStats(TypedDict):
+#         Version: str
+#         Branches: str
+#         Log: str
+#         HEAD: str
 
-        @staticmethod
-        def factory(worktree: pathlib.Path) -> Ctx.Spec.About.GitStats:
-          return {
-            'Version': subprocess.run(['git', '--version'], check=True, capture_output=True).stdout.decode().strip(),
-            'Branches': subprocess.run(['git', 'branch', '--list'], check=True, cwd=worktree.as_posix(), capture_output=True).stdout.decode().strip(),
-            'Log': 'Last 3 Commits:\n' + subprocess.run(['git', 'log', '--oneline', '-n', '3'], check=True, cwd=worktree.as_posix(), capture_output=True).stdout.decode().strip(),
-            'HEAD': subprocess.run(['git', 'rev-parse', 'HEAD'], check=True, cwd=worktree.as_posix(), capture_output=True).stdout.decode().strip(),
-          }
+#         @staticmethod
+#         def factory(worktree: pathlib.Path) -> Ctx.Spec.About.GitStats:
+#           return {
+#             'Version': subprocess.run(['git', '--version'], check=True, capture_output=True).stdout.decode().strip(),
+#             'Branches': subprocess.run(['git', 'branch', '--list'], check=True, cwd=worktree.as_posix(), capture_output=True).stdout.decode().strip(),
+#             'Log': 'Last 3 Commits:\n' + subprocess.run(['git', 'log', '--oneline', '-n', '3'], check=True, cwd=worktree.as_posix(), capture_output=True).stdout.decode().strip(),
+#             'HEAD': subprocess.run(['git', 'rev-parse', 'HEAD'], check=True, cwd=worktree.as_posix(), capture_output=True).stdout.decode().strip(),
+#           }
 
 if __name__ == '__main__':
   def test_marshal_unmarshal():
