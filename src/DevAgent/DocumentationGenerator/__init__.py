@@ -36,3 +36,29 @@ The Documentation Generation framework is:
   - Continuously Iterate as things change; introduce new topics, references, semantics and information.
 
 """
+import json, logging
+from typing import Any
+
+logger = logging.getLogger(__name__)
+
+class JSONCapture:
+
+  def __init__(self, sink: str):
+    self._sink_src = sink
+    self._sink = open(sink, mode='a+')
+
+  def __del__(self):
+    if not self._sink.closed:
+      self._sink.flush()
+      self._sink.close()
+  
+  def __bool__(self): return not self._sink.closed
+
+  def write(self, o: Any):
+    try: self._sink.write(json.dumps(o) + '\n')
+    except json.JSONDecodeError: logger.warning('Failed to Encode Capture Object; Not valid JSON')
+  
+  def close(self):
+    if not self._sink.closed:
+      self._sink.flush()
+      self._sink.close()

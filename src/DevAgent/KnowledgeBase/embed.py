@@ -187,6 +187,24 @@ class Embedding(TypedDict):
       })
     }
 
+  # @staticmethod
+  # def slice(embedding: Embedding, start: int, stop: int) -> Embedding:
+  #   """Slice an Embedding"""
+  #   start, stop = max(0, start), min(embedding['shape'][0], stop)
+  #   logger.debug(f'Slicing Embedding from [{start}, {stop}]')
+  #   metadata = {}
+  #   if ''
+  #   return Embedding.factory(
+  #     iter(...),
+  #     shape=tuple(embedding['shape'][1:]),
+  #     dtype=embedding['dtype'],
+  #     model=embedding['model'],
+  #     metadata={
+  #       'DocChunks': embedding['metadata']['DocChunks'][start:stop],
+  #       'Similarity': embedding['metadata']['Similarity'][start:stop],
+  #     }
+  #   )
+
 @dataclass
 class EmbeddingInterface:
   conn: ConnectionProxy

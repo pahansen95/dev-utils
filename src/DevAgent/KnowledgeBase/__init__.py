@@ -558,3 +558,22 @@ My response will not include any special formatting.
       query_embed,
       matches
     )
+
+  @staticmethod
+  def embedding_content(
+    corpus: Corpus,
+    doc: str,
+    *embeds: embed.Embedding,
+  ) -> Iterator[tuple[tuple[int, int], str]]:
+    """Iterate over the embedding (batches) for a document returning the document's corresponding content"""
+    if doc not in corpus.documents: raise ValueError(f'Uknown Corpus Document: {doc}')
+    for embed_idx, embed in enumerate(embeds):
+      for batch_idx, batch in enumerate(embed['metadata']['DocChunks']):
+        yield (
+          (embed_idx, batch_idx),
+          ''.join(corpus.read_document(
+            doc,
+            start=batch['start'],
+            end=batch['start'] + batch['len'] - 1,
+          ))
+        )
