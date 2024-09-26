@@ -53,11 +53,14 @@ class SubCommands:
       if not chat_log['log'] or not chat_log['log'][-1]['publisher'].startswith('user:'): return None
       else: return chat_log['log'].pop()
     def _sync_chat_log(): chat_log_file.write_bytes(Chat.Log.marshal(chat_log))
-    def _commit_chat_log(): Git.sync(
-      msg='Sync Chat Log',
-      pathspecs=[ chat_log_file.relative_to(GIT_WORKTREE).as_posix() ],
-      worktree=GIT_WORKTREE,
-    )
+    def _commit_chat_log():
+      try: Git.sync(
+        msg='Sync Chat Log',
+        pathspecs=[ chat_log_file.relative_to(GIT_WORKTREE).as_posix() ],
+        worktree=GIT_WORKTREE,
+      )
+      except subprocess.CalledProcessError as e: logger.warning(f'Failed to Commit the Chat Log; Please manually sync:\n\n{e.stderr}')
+      except Exception as e: logger.exception('Failed to Commit the Chat Log; Please manually sync.')
     def _chat_msg_to_llm_msg(msg: Chat.Message) -> llm.Message:
       role = msg['publisher'].split(':', maxsplit=1)[0]
       if role == 'agent': role = 'assistant'
