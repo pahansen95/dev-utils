@@ -59,7 +59,7 @@ class SubCommands:
         pathspecs=[ chat_log_file.relative_to(GIT_WORKTREE).as_posix() ],
         worktree=GIT_WORKTREE,
       )
-      except subprocess.CalledProcessError as e: logger.warning(f'Failed to Commit the Chat Log; Please manually sync:\n\n{e.stderr}')
+      except subprocess.CalledProcessError as e: logger.warning(f'Failed to Commit the Chat Log; Please manually sync:\n\n{(e.stdout or "").strip()}\n{(e.stderr or "").strip()}')
       except Exception as e: logger.exception('Failed to Commit the Chat Log; Please manually sync.')
     def _chat_msg_to_llm_msg(msg: Chat.Message) -> llm.Message:
       role = msg['publisher'].split(':', maxsplit=1)[0]
