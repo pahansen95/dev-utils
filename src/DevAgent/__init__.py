@@ -124,8 +124,8 @@ class Git:
     pathspecs: list[str],
     worktree: pathlib.Path,
   ):
-    subprocess.run(['git', 'add', *pathspecs], check=True, cwd=worktree.as_posix())
-    subprocess.run(['git', 'commit', '-m', msg, *pathspecs], check=True, cwd=worktree.as_posix())
+    subprocess.run(['git', 'add', *pathspecs], check=True, cwd=worktree.as_posix(), capture_output=True)
+    subprocess.run(['git', 'commit', '-m', msg, *pathspecs], check=True, cwd=worktree.as_posix(), capture_output=True)
 
 # class Ctx:
 #   """Semantic Type for a Project Context
