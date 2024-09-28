@@ -60,23 +60,25 @@ elif PROVIDER == 'anthropic':
   }
   def _load_body(*msg: Message) -> dict[str, Any]:
     if msg[0]['role'] == 'system':
-      logger.debug('Anthropic Provider does not support system messages, will extract & pass to API as `system` prop')
+      logger.debug('Anthropic Provider does not support system messages, will extract')
       system = msg[0]['content']
       msg = msg[1:]
     else:
-      system = 'You are an Automated Python Peer Programmer.'
-    logger.debug('Anthropic Provider system property...\n' + system)
-    if msg[0]['role'] != 'user':
-      logger.debug('Anthropic Provider requires the first message to be from the user; will prepend a basic user message.')
-      msg = [
-        { 'role': 'user', 'content': "begin" }, # Anthropic requires the first Message be a user message
-        *msg
-      ]
+      system = 'You are a helpful assistant, follow my instructions.'
+
+    ### Create the `Psuedo` System Prompt
+    role_msgs: list[Message] = [
+      { 'role': 'user', 'content': system },
+    ]
+    # NOTE: Anthropic requires user/assistant turn based messaging so only add the assistant response if the first message is from the user
+    if msg[0]['role'] == 'user': role_msgs.append(
+      { 'role': 'assistant', 'content': 'I will assume the role & characteristics you have given me, starting now.' }
+    )
     return { # API Ref: https://docs.anthropic.com/en/api/messages
       'model': MODEL_ID,
       **MODEL_CFG,
-      'system': system,
-      'messages': list(msg),
+      'system': 'Assume the role & characteristics the user provides you.',
+      'messages': [ *role_msgs, *msg ],
       'stream': False,
     }
   def extract_content(body: bytes) -> str: return json.loads(body)['content'][0]['text']
@@ -156,7 +158,8 @@ Generally follow these guidelines when conversing:
 - Assume the user is intelligient & will ask you to clarify if necessary.
 - Approach logical quandary through methodical analysis.
 - Avoid hallucinating knowledge but identify when you do & inform the user.
-- Speak in active voice & exclude apologetic statements.
+- Speak in active voice
+- Exclude statements that are apologetic or gratify the user; you are their peer.
 - Stay relevant to the topics at hand.
 """.strip()
 }
