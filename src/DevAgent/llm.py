@@ -60,11 +60,14 @@ elif PROVIDER == 'anthropic':
   }
   def _load_body(*msg: Message) -> dict[str, Any]:
     if msg[0]['role'] == 'system':
+      logger.debug('Anthropic Provider does not support system messages, will extract & pass to API as `system` prop')
       system = msg[0]['content']
       msg = msg[1:]
     else:
       system = 'You are an Automated Python Peer Programmer.'
+    logger.debug('Anthropic Provider system property...\n' + system)
     if msg[0]['role'] != 'user':
+      logger.debug('Anthropic Provider requires the first message to be from the user; will prepend a basic user message.')
       msg = [
         { 'role': 'user', 'content': "begin" }, # Anthropic requires the first Message be a user message
         *msg
