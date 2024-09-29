@@ -7,8 +7,8 @@ command -v 'DevAgent.sh' &> /dev/null || {
   return 1
 }
 
-parse_chat_name() {
-  local name="${1:?Missing Chat Name}"
+parse_name() {
+  local name="${1:?Missing Name}"
   ### Split name by '/' & '.*'
   name="${name##*/}"
   name="${name%%.*}"
@@ -17,8 +17,10 @@ parse_chat_name() {
   printf '%s' "${name}"
 }
 
+declare ctx_name=; ctx_name="$(parse_name "${1:?Missing Context Name}")"; shift
+log "Context Name: ${ctx_name}"
 declare chat_name; chat_name="$(parse_chat_name "${1:-"$(date '+%Y-%m-%d')"}")"
 log "Chat Name: ${chat_name}"
 DevAgent.sh DevAgent chat \
-  "${WORK_DIR}/meta/Context/${1:?Missing Context Name}.py" \
+  "${WORK_DIR}/meta/Context/${ctx_name}.py" \
   "${WORK_DIR}/meta/ChatLog/${chat_name}.md"
