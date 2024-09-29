@@ -19,6 +19,6 @@ parse_chat_name() {
 
 declare chat_name; chat_name="$(parse_chat_name "${1:-"$(date '+%Y-%m-%d')"}")"
 log "Chat Name: ${chat_name}"
-DevAgent.sh \
+DevAgent.sh DevAgent chat \
   "${WORK_DIR}/meta/Context/${1:?Missing Context Name}.py" \
   "${WORK_DIR}/meta/ChatLog/${chat_name}.md"
