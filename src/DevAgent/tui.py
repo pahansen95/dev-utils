@@ -10,7 +10,7 @@ from typing import Literal
 from collections.abc import Generator, Callable
 import os, sys, tempfile, subprocess, shlex, re, logging
 
-from . import Chat
+from .Utils import Chat
 
 logger = logging.getLogger(__name__)
 

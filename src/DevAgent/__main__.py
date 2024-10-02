@@ -6,13 +6,13 @@ K.I.S.S: Opt for the dumbest implementation first.
 
 """
 from __future__ import annotations
-import logging, pathlib, os, sys, tempfile, subprocess, shlex, re, hashlib
+import logging, pathlib, os, sys, subprocess, hashlib, requests
 from typing import Literal
 from collections import deque
 
 logger = logging.getLogger(__name__)
 is_stdin_tty = os.isatty(sys.stdin.fileno())
-  
+
 class SubCommands:
 
   @staticmethod
@@ -33,16 +33,20 @@ class SubCommands:
     """
     if not is_stdin_tty: raise RuntimeError('Interactive Chat is only supported in TTY Mode')
 
-    from . import tui, Chat, Git, llm, AgentCtx
-    from .AgentCtx import CtxUtils
+    from . import tui, AgentCtx
+    from .Utils import Chat, Git
+    from .Utils.NatLang import load_chat_interface
+    from .Utils.NatLang.chat import SYSTEM_PROMPT_MSG, Message
+
+    chat = load_chat_interface(**os.environ)
 
     GIT_WORKTREE = pathlib.Path(os.environ.get('WORK_DIR'))
     
     if not (chat_ctx_file := pathlib.Path(chat_ctx_src)).exists(): raise RuntimeError(f'File Not Found: {chat_ctx_src}')
     _load_chat_ctx = AgentCtx.load_spec_factory(chat_ctx_file)
-    logger.debug(f'Example Chat Context...\n{CtxUtils.render_ctx(_load_chat_ctx())}')
+    logger.debug(f'Example Chat Context...\n{AgentCtx.CtxUtils.render_ctx(_load_chat_ctx())}')
 
-    system_prompt = llm.SYSTEM_PROMPT_MSG # TODO: Make Customizable
+    system_prompt = SYSTEM_PROMPT_MSG # TODO: Make Customizable
 
     if not (chat_log_file := pathlib.Path(chat_log_src)).exists() or chat_log_file.stat().st_size <= 0: chat_log = Chat.Log.factory()
     else: chat_log = Chat.Log.unmarshal(chat_log_file.read_bytes())
@@ -61,17 +65,17 @@ class SubCommands:
       )
       except subprocess.CalledProcessError as e: logger.warning(f'Failed to Commit the Chat Log; Please manually sync:\n\n{((e.stdout or "").rstrip() + "\n\n" + (e.stderr or "").lstrip()).strip()}')
       except Exception as e: logger.exception('Failed to Commit the Chat Log; Please manually sync.')
-    def _chat_msg_to_llm_msg(msg: Chat.Message) -> llm.Message:
+    def _chat_msg_to_llm_msg(msg: Chat.Message) -> Message:
       role = msg['publisher'].split(':', maxsplit=1)[0]
       if role == 'agent': role = 'assistant'
       elif role == 'user': role = 'user'
       else: raise ValueError(f'Unknown Role: {role}')
       return { 'role': role, 'content': msg['content'] }
     def _llm_chat() -> Chat.Message: return Chat.Message.factory(
-      publisher=f'agent:llm:{llm.PROVIDER}:{llm.MODEL_ID}',
-      content=llm.chat(
+      publisher=f'agent:llm:{chat.provider.chat_model_identifier}',
+      content=chat.chat(
         system_prompt,
-        { 'role': 'user', 'content': CtxUtils.render_ctx(_load_chat_ctx()) },
+        { 'role': 'user', 'content': AgentCtx.CtxUtils.render_ctx(_load_chat_ctx()) },
         { 'role': 'assistant', 'content': 'I will consult the provided context.' }, # Maintain the User/Assistant turn taking
         *map(_chat_msg_to_llm_msg, chat_log['log'])
       ),

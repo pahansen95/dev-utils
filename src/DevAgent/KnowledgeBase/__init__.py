@@ -12,10 +12,8 @@ from typing import Literal, TypedDict, Optional, Any
 from collections.abc import Iterable, Iterator, ByteString
 from dataclasses import dataclass
 
-from .embed import INTERFACE as Embeddings
-### TODO: Refactor
-from .. import llm
-###
+raise NotImplementedError('Refactor to use the new NatLang Utils')
+from ..Utils.NatLang import embed, chat
 
 logger = logging.getLogger(__name__)
 
@@ -367,6 +365,20 @@ class Document:
     return yaml.safe_load(metadata_file.read_bytes())
 
 class Semantics:
+  """TODO
+
+  - Semantic Chunking:
+    > NOTE: Probably needs a preclassifier to determine if the approach matches the content
+    - Split a Document on "sentences"
+    - embed each sentence
+    - connect the dots
+    - walk the path (aka narrative)
+    - establish node groups based on distances
+    - each group becomes a document chunk
+  - Sliding Window Chunking:
+    - Split on N Chars
+  
+  """
 
   @staticmethod
   def embed(*chunk: str) -> embed.Embedding:
@@ -376,7 +388,7 @@ class Semantics:
   @staticmethod
   def distill(*chunk: str, existing: list[str] = []) -> list[str]:
     """Extract a list of Salient Information from the provided chunks merging with the existing list"""
-    msg_chain: list[llm.Message] = [
+    msg_chain: list[chat.Message] = [
       {
         'role': 'system',
         'content': 'You are an automated text processor. Given a chunk of text, you extract salient information.'
@@ -406,9 +418,9 @@ I am providing previously extracted salient information:
     for c in chunk:
       attempt_count = 0
       while attempt_count < 5:
-        resp: str = llm.chat(*msg_chain, { 'role': 'user', 'content': c.strip() }).strip()
+        resp: str = chat.chat(*msg_chain, { 'role': 'user', 'content': c.strip() }).strip()
         attempt_count += 1
-        try: resp_json: str = llm.extract_markdown_code_block(resp, 'json')
+        try: resp_json: str = chat.extract_markdown_code_block(resp, 'json')
         except:
           logger.debug(f"Failed to Extract JSON Code Block from Response")
           resp_json = resp

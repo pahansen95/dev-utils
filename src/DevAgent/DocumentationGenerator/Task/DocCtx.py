@@ -26,7 +26,7 @@ modified and expanded as we learn more about what kinds of context are most usef
 """
 from __future__ import annotations
 import networkx as nx, functools, math, logging
-from typing import IO, Literal
+from typing import IO, Literal, Iterable
 from dataclasses import dataclass, field, KW_ONLY
 from collections import OrderedDict
 
@@ -113,52 +113,54 @@ class Context:
       ### Search the KB w/ the Query
       _, search_results = kb.Semantics.search(
         query, self.corpus,
-        similarity_bounds=(0.2, 1.0), # TODO: What should these values be
+        similarity_bounds=(0.5, 1.0), # TODO: What should these values be
       )
       if len(search_results) < 1: # Short Circuit
         logger.warning('No Relevant Information for the topic could be found in the Knowledge Base')
         return
 
       ### For Each Result...
-      for doc, embedding in search_results.items():
+      for doc, embedding_batch in search_results.items():
         logger.debug(f'Found related content to Topic in Document {doc}')
-        embedding_vec = kb.embed.Embedding.unpack(embedding)
+        batch_vecs = kb.embed.Embedding.unpack(embedding_batch)
         ### TODO: Refactor
-        assert len(embedding['shape']) == 2, embedding['shape']
-        _, _vec_dims = embedding['shape']
-        _vec_bytesize = kb.embed._VEC_DTYPE[embedding['dtype']].bytesize * _vec_dims
+        assert len(embedding_batch['shape']) == 2, embedding_batch['shape']
+        _batch_size, _vec_dims = embedding_batch['shape']
+        _vec_bytesize = kb.embed._VEC_DTYPE[embedding_batch['dtype']].bytesize * _vec_dims
         ###
-        for (embed_idx, batch_idx), content in kb.Semantics.embedding_content(self.corpus, doc, embedding):
+        for (embed_idx, batch_idx), content in kb.Semantics.embedding_content(self.corpus, doc, embedding_batch):
           assert embed_idx == 0, embed_idx
 
           ### Calculate the relevancy relative to the Source Topic
           # Calculate the Dot Product between the Search Result Embedding & the Topic's Embedding
-          relevance: float = math.sumprod(topic_vec, embedding_vec[batch_idx])
+          relevance: float = math.sumprod(topic_vec, batch_vecs[batch_idx])
           logger.debug(f'Relevance Score: {relevance}')
 
           ### Add the search results to the Context pruning any results that fall below a relevancy decay threshold
           if relevance >= relevance_threshold:
             logger.debug(f'Related Content Chunk={embed_idx}, Batch={batch_idx}')
-            _start = _vec_bytesize * batch_idx
-            _stop = _start + _vec_bytesize
-            assert _start >= 0 and _start < len(embedding['buffer']), f"{_start=}, {len(embedding['buffer'])=}"
-            assert _stop > 0 and _stop <= len(embedding['buffer']), f"{_stop=}, {len(embedding['buffer'])=}"
+            _vec_start = _vec_bytesize * batch_idx
+            _vec_stop = _vec_start + _vec_bytesize
+            _doc_start = embedding_batch['metadata']['DocChunks'][batch_idx]['start']
+            _doc_stop = _doc_start + embedding_batch['metadata']['DocChunks'][batch_idx]['len']
+            assert _vec_start >= 0 and _vec_start < len(embedding_batch['buffer']), f"{_vec_start=}, {len(embedding_batch['buffer'])=}"
+            assert _vec_stop > 0 and _vec_stop <= len(embedding_batch['buffer']), f"{_vec_stop=}, {len(embedding_batch['buffer'])=}"
             if content in self.kg: raise NotImplementedError
             if self.capture: self.capture.write({
               'kind': 'Context Management',
-              'content': f'Adding Relevant Content from `{doc}({_start}:{_stop})` to Context({id(self)})...\n\n' + content
+              'content': f'Adding Relevant Content from `{doc}({_doc_start}:{_doc_stop})` to Context({id(self)})...\n\n' + content
             })
             self.kg.add_node( # Add the Related Content Node
               content,
               kind='RELATED',
               embedding=kb.embed.Embedding.factory(
-                embedding['buffer'][_start:_stop], # Slice out the individual Embedding Vector from the batch
-                shape=tuple(embedding['shape'][1:]),
-                dtype=embedding['dtype'],
-                model=embedding['model'],
+                embedding_batch['buffer'][_vec_start:_vec_stop], # Slice out the individual Embedding Vector from the batch
+                shape=tuple(embedding_batch['shape'][1:]),
+                dtype=embedding_batch['dtype'],
+                model=embedding_batch['model'],
                 metadata={
-                  'DocChunks': [ embedding['metadata']['DocChunks'][batch_idx] ],
-                  'Similarity': [ embedding['metadata']['Similarity'][batch_idx] ]
+                  'DocChunks': [ embedding_batch['metadata']['DocChunks'][batch_idx] ],
+                  'Similarity': [ embedding_batch['metadata']['Similarity'][batch_idx] ]
                 }
               )
             )
@@ -175,26 +177,34 @@ class Context:
   def lookup(self,
     query: str,
     relevancy: float = 0.0,
-  ) -> dict[str, list[dict[str, str | float]]]:
-    """Lookup relevant information to the query"""
+  ) -> dict[str, nx.MultiDiGraph]:
+    """Lookup information relevant to the query; returns the Context Tree for each related topic"""
     ### Determine the SOURCE Nodes most relevant to the Query
-
-    ### For each SOURCE Node, traverse the Context Tree
-
-      ### Traverse the Entire Breadth
-
-      ### Prune Traversal Branches below the relevancy score (by default include all results)
+    if query not in (n for n, d in self.kg.nodes(data='kind', default=None) if d == 'TOPIC'):
+      # TODO: Generate an embedding; calculate similarity; filter out unrelated topics
+      raise NotImplementedError
+    else:
+      topics = [ query ]
     
-    ### Return the Results
+    if not topics: # Short Circuit
+      logger.warning(f'No Topics in the context are relevant to the query...\n{query}')
+      return {}
 
-    return {
-      topic: [
-        {
-          'content': ...,
-          'score': ...
-        } for result in [ ... ]
-      ] for topic in [ ... ]
-    }
+    ### For each Topic traverse the Context Tree
+    def filter_ctx_tree_nodes(topic: str) -> Iterable[str]:
+      assert topic in self.kg.nodes
+      for u, v, k in nx.edge_dfs(self.kg, source=topic):
+        if (
+          k in ('TOPIC->RELATED', 'RELATED->RELATED')
+          and self.kg[u][v][k]['relevance'] > relevancy
+        ):
+          yield (u, v, k)
+
+    ### Build the Context Trees
+    return { k: v for k, v in {
+      topic: self.kg.edge_subgraph(filter_ctx_tree_nodes(topic))
+      for topic in topics
+    }.items() if len(v) > 0 }
 
   def clear(self):
     """Clears all data in the knowledge graph; effectively resetting it"""

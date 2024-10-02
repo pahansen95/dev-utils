@@ -11,11 +11,15 @@ Content Generation follows:
 """
 from __future__ import annotations
 from typing import IO
+import networkx as nx, logging
 
 ## Local Imports
+raise NotImplementedError('Refactor to use new NatLang Utils')
 from ... import llm, KnowledgeBase as kb
 from . import DocCtx
 ##
+
+logger = logging.getLogger(__name__)
 
 ctx = DocCtx.Context()
 """The Shared Context"""
@@ -54,10 +58,9 @@ def entrypoint(
   ### Dynamically Generate the Context
   # TODO: Generate a Topic using an LLM
   topic = "This document outlines a comprehensive plan for creating and structuring documentation for an AI-powered developer productivity toolkit called DevAgent. It emphasizes the importance of clear, concise, and thorough documentation that caters to highly skilled software developers. The document describes the toolkit's purpose, target audience, core message, and key objectives, highlighting DevAgent's role in enhancing developer workflows through AI-assisted information management and knowledge acquisition. It also provides a framework for organizing the documentation, including sections on architecture, core modules, and usage guidelines. The plan emphasizes the dynamic and iterative nature of the documentation process, utilizing a directed graph approach for generating content, with the ultimate goal of enabling developers to effectively contribute to and extend the DevAgent package."
-  ctx.grow(topic) # TODO: Specify the topics used to Grow the Context
-  raise NotImplementedError
-  ctx_lookup = ctx.lookup(...)
-  doc_ctx: str = render_ctx(ctx_lookup) + extra_doc_ctx.strip() # TODO: Generate a Query to Render the Context
+  ctx.grow(topic)
+  ctx_lookup = ctx.lookup(topic)
+  doc_ctx: str = render_ctx(ctx_lookup) + '\n\n' + extra_doc_ctx.strip()
   if doc_ctx.strip(): doc_msgs += [
     { 'role': 'assistant', 'content': 'I understand; provide me with any relevant context.' },
     { 'role': 'user', 'content': doc_ctx },
@@ -101,6 +104,19 @@ h) State any limitations or insufficient information clearly.
 
 ### Helpers
 
-def render_ctx(lookup_results: dict) -> str:
+def render_ctx(lookup_results: dict[str, nx.MultiDiGraph]) -> str:
   """Render the Context relevant to the query"""
-  return ''
+  if not lookup_results:
+    logger.warning(f'Not Context to Render')
+    return '<!-- No Context Available -->'
+  output = "# Relevant Context\n\n"
+  for topic, ctx_graph in lookup_results.items():
+    output += f'## {topic}\n\n'
+    topic_nodes = [ n for n, d in ctx_graph.nodes(data='kind') if d == 'TOPIC' ]
+    assert len(topic_nodes) == 1, topic_nodes
+    topic_node = next(topic_nodes)
+    assert isinstance(topic_node, str)
+    for node in nx.dfs_preorder_nodes(ctx_graph, source=topic_node):
+      output += node + '\n'
+  return output.rstrip()
+  
