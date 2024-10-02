@@ -130,8 +130,10 @@ class EmbeddingInterface(_Interface):
         model=self.provider.embed_model_identifier,
       )
       elif status.major in {4, 5}:
-        logger.error(f"Embed Failed: {status} {resp.reason}: {self.provider.embed_extract_error(resp.content)}")
-        raise RuntimeError(f"Embed Failed: {status} {resp.reason}: {self.provider.embed_extract_error(resp.content)}")
+        msg = f"Embed Failed: {status} {resp.reason}"
+        if resp.content is not None: msg += f': {self.provider.embed_extract_error(resp.content)}'
+        logger.error(msg)
+        raise RuntimeError(msg)
       else: raise NotImplementedError(f"Unhandled HTTP Status: {status}")
 
 ### NOTE: Temporary Embedding Vector Helpers

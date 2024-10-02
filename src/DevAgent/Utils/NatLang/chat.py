@@ -36,8 +36,10 @@ class ChatInterface(_Interface):
     ) as (status, resp):
       if status.major == 2: return self.provider.chat_extract_content(resp.content)
       elif status.major in {4, 5}:
-        logger.error(f"Chat Failed: {status} {resp.reason}: {self.provider.chat_extract_error(resp.content)}")
-        raise RuntimeError(f"Chat Failed: {status} {resp.reason}: {self.provider.chat_extract_error(resp.content)}") # TODO: Handle Retries
+        msg = f"Chat Failed: {status} {resp.reason}"
+        if resp.content is not None: msg += f': {self.provider.chat_extract_error(resp.content)}'
+        logger.error(msg)
+        raise RuntimeError(msg)
       else: raise NotImplementedError(f"Unhandled HTTP Status: {status}")
 
 SYSTEM_PROMPT_MSG: Message = {
