@@ -92,10 +92,10 @@ class SubCommands:
       chat_log['log'].append(Chat.Message.factory(publisher='user:tty', content=user_resp))
       logger.debug('Syncing User Message to Chat Log...')
       _sync_chat_log()
-      logger.info('Waiting for Response from LLM...')
+      logger.info(f'Waiting for Response from Model `{chat.provider.chat_model_identifier}`...')
       try: chat_log['log'].append(_llm_chat())
       except: raise # TODO: Handle Errors
-      logger.debug('Syncing LLM Response to Chat Log...')
+      logger.debug('Syncing Model Response to Chat Log...')
       _sync_chat_log()
     
     logger.info('Conversation has concluded')
