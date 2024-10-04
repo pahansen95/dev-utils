@@ -83,9 +83,20 @@ class OpenAIProvider(ModelProvider):
       'Authorization': f'Bearer {self.cfg['chat']['token']}'
     }
   def chat_req_body(self, *messages: Message, **kwargs) -> dict[str, Any]:
+    system_prompt = []
+    if (model := self.cfg['chat']['model']).startswith('o1') and messages[0]['role'] == 'system':
+      logger.debug(f'Model {model} does not support System Messages; will extract & inject as a prompt/resp messages')
+      system_prompt.append(
+        { 'role': 'user', 'content': messages[0]['content'] },
+      )
+      if messages[1]['role'] == 'user': system_prompt.append(
+        { 'role': 'assistant', 'content': 'I understand, please continue.' }
+      )
+      messages = messages[1:]
+
     return self.cfg['chat'].get('props', {}) | {
-      'model': self.cfg['chat']['model'],
-      'messages': list(messages),
+      'model': model,
+      'messages': [ *system_prompt, *messages ],
       'stream': False,
     }
   def chat_extract_content(self, body: bytes) -> list[bytes]:

@@ -15,7 +15,7 @@ import urllib.parse, logging, json, functools, os, base64
 ### Pkg Imports
 from ....Utils import get_chain
 from .. import ModelProvider, ProviderCfg, ProviderError, ModelCfg
-from ..chat import Message
+from ..chat import Message, SYSTEM_PROMPT
 ###
 
 logger = logging.getLogger(__name__)
@@ -63,22 +63,22 @@ class AnthropicProvider(ModelProvider):
       system = messages[0]['content']
       messages = messages[1:]
     else:
-      system = 'You are a helpful assistant, follow my instructions.'
+      system = SYSTEM_PROMPT['content']
 
     ### Create the `Psuedo` System Prompt
-    role_msgs: list[Message] = [
+    system_prompt: list[Message] = [
       { 'role': 'user', 'content': system },
     ]
     # NOTE: Anthropic requires user/assistant turn based messaging so only add the assistant response if the first message is from the user
-    if messages[0]['role'] == 'user': role_msgs.append(
-      { 'role': 'assistant', 'content': 'I will assume the role & characteristics you have given me, starting now.' }
+    if messages[0]['role'] == 'user': system_prompt.append(
+      { 'role': 'assistant', 'content': 'I understand, please continue.' }
     )
     return { # Model Defaults that can be overridden
       'max_tokens': self.cfg['chat']['outputSize'],
     } | self.cfg['chat'].get('props', {}) | { # API Ref: https://docs.anthropic.com/en/api/messages
       'model': self.cfg['chat']['model'],
-      'system': 'Assume the role & characteristics the user provides you.',
-      'messages': [ *role_msgs, *messages ],
+      'system': SYSTEM_PROMPT['content'],
+      'messages': [ *system_prompt, *messages ],
       'stream': False,
     }
   def chat_extract_content(self, body: bytes) -> list[bytes]:
