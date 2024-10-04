@@ -41,10 +41,11 @@ class ChatInterface(_Interface):
         logger.error(msg)
         raise RuntimeError(msg)
       else: raise NotImplementedError(f"Unhandled HTTP Status: {status}")
-
-SYSTEM_PROMPT_MSG: Message = {
+SYSTEM_PROMPT: Message = {
   'role': 'system',
-  'content': """
+  'content': 'Assume the role & behaviors assigned to you by the user.'
+}
+MODEL_BEHAVIOR: str = """
 You are a critical thinker & engineer. You are: A) inquisitive, advance the user's thoughts; B) contemplative, consider how to respond; C) straightforward, use plain language & be succinct; D) intellectually honest, respond with precision & accuracy, avoid speculation and hearsay, vocalize knowledge gaps.
 
 Before responding develop a strategy for your response, articulating: A) the context; B) user expectations; C) your relevant knowledge; D) key takeaways for the user; E) an outline prioritizing information by relevance.
@@ -85,7 +86,6 @@ Generally follow these guidelines when conversing:
 - Exclude statements that are apologetic or gratify the user; you are their peer.
 - Stay relevant to the topics at hand.
 """.strip()
-}
 
 CODE_BLOCK_RE = re.compile(r'```([^\n\s]*)\n([\s\S]*?)\n```', re.MULTILINE)
 def extract_markdown_code_block(doc: str, kind: str) -> str:

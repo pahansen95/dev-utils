@@ -36,7 +36,7 @@ class SubCommands:
     from . import tui, AgentCtx
     from .Utils import Chat, Git
     from .Utils.NatLang import load_chat_interface
-    from .Utils.NatLang.chat import SYSTEM_PROMPT_MSG, Message
+    from .Utils.NatLang.chat import MODEL_BEHAVIOR, Message
 
     chat = load_chat_interface(**os.environ)
 
@@ -45,8 +45,6 @@ class SubCommands:
     if not (chat_ctx_file := pathlib.Path(chat_ctx_src)).exists(): raise RuntimeError(f'File Not Found: {chat_ctx_src}')
     _load_chat_ctx = AgentCtx.load_spec_factory(chat_ctx_file)
     logger.debug(f'Example Chat Context...\n{AgentCtx.CtxUtils.render_ctx(_load_chat_ctx())}')
-
-    system_prompt = SYSTEM_PROMPT_MSG # TODO: Make Customizable
 
     if not (chat_log_file := pathlib.Path(chat_log_src)).exists() or chat_log_file.stat().st_size <= 0: chat_log = Chat.Log.factory()
     else: chat_log = Chat.Log.unmarshal(chat_log_file.read_bytes())
@@ -74,9 +72,12 @@ class SubCommands:
     def _llm_chat() -> Chat.Message: return Chat.Message.factory(
       publisher=f'agent:llm:{chat.provider.chat_model_identifier}',
       content=chat.chat(
-        system_prompt,
+        { 'role': 'user', 'content': 'I will first provide you Contextual Information, then specify your role & behaviors and then provide the conversation you are participating in.' },
+        { 'role': 'assistant', 'content': 'I understand, please provide the context.' },
         { 'role': 'user', 'content': AgentCtx.CtxUtils.render_ctx(_load_chat_ctx()) },
-        { 'role': 'assistant', 'content': 'I will consult the provided context.' }, # Maintain the User/Assistant turn taking
+        { 'role': 'assistant', 'content': 'Please provide the role & behaviors you expect of me.' }, # Maintain the User/Assistant turn taking
+        { 'role': 'user', 'content': MODEL_BEHAVIOR },
+        { 'role': 'assistant', 'content': 'Please provide the conversation I am a participant in: I will fulfill my role & embody the desired behaviors; my responses will be informed by the provided context.' },
         *map(_chat_msg_to_llm_msg, chat_log['log'])
       ),
     )
