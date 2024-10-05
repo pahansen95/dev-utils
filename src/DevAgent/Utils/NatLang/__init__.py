@@ -113,12 +113,14 @@ from . import chat, embed, Provider
 ###
 
 def load_chat_interface(provider_name: str | None = None, **o) -> chat.ChatInterface:
+  logger.info(f'Loading Chat Interface for Provider: {provider_name}')
   if provider_name is None: provider_name = Provider.get_provider_name_from_map('chat', **o)
   return chat.ChatInterface(
     provider=Provider.load_provider_by_name_from_map(provider_name, { 'chat', }, **o),
     conn=requests.Session(),
   )
 def load_embed_interface(provider_name: str | None = None, **o) -> embed.EmbeddingInterface:
+  logger.info(f'Loading Embedding Interface for Provider: {provider_name}')
   if provider_name is None: provider_name = Provider.get_provider_name_from_map('embed',**o)
   return embed.EmbeddingInterface(
     provider=Provider.load_provider_by_name_from_map(provider_name, { 'embed', }, **o),

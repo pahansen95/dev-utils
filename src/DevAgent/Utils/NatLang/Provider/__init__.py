@@ -20,6 +20,8 @@ PROVIDER_REGISTRY: dict[str, ModelProvider] = {}
 def add_provider_to_registry(provider: str, registry: dict[str, ModelProvider] = PROVIDER_REGISTRY, **o):
   assert provider not in registry
 
+  logger.info(f'Adding Provider to Registry: {provider}')
+
   if provider == 'OpenAI':
     from . import OpenAI
     load_provider_cfg = OpenAI.load_provider_config
@@ -45,13 +47,16 @@ def add_provider_to_registry(provider: str, registry: dict[str, ModelProvider] =
     provider_factory = Anthropic.AnthropicProvider
   else: raise UnknownProvider(f'{provider} is not an available selection')
 
+  logger.debug(f'Loading Provider {provider} Chat Config')
   chat_cfg = None
   try: chat_cfg = load_chat_cfg(**o)
   except KeyError as e: logger.warning(f'Could not load Chat Config for Provider `{provider}`: {e}')
+  logger.debug(f'Loading Provider {provider} Embed Config')
   embed_cfg = None
   try: embed_cfg = load_embed_cfg(**o)
   except KeyError as e: logger.warning(f'Could not load Embed Config for Provider `{provider}`: {e}')
   
+  logger.debug(f'Loading Provider {provider} Config')
   provider_cfg = load_provider_cfg(**o)
   if chat_cfg is not None: provider_cfg |= { 'chat': chat_cfg }
   if embed_cfg is not None: embed_cfg |= { 'embed': embed_cfg }
@@ -69,6 +74,7 @@ def load_provider_by_name_from_map(provider_name: str, requires: set[kind_t], re
   """Load a provider from a Flat Mapping of Configurables into the provided registry."""
 
   if provider_name not in registry: add_provider_to_registry(provider_name, registry=registry, **o)
+  assert provider_name in registry
 
   if (missing := [
     r for r in requires
