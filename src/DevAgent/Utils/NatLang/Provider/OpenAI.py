@@ -39,7 +39,7 @@ def load_embed_config(**o: str) -> ModelCfg:
     'outputDType': 'float32',
   }))) | {
     'endpoint': urllib.parse.urlparse(
-      o.get('DEVAGENT_PROVIDER_OPENAI_ENDPOINT', 'https://api.openai.com/v1/chat/completions')
+      o.get('DEVAGENT_PROVIDER_OPENAI_EMBED_ENDPOINT', 'https://api.openai.com/v1/embeddings')
     ),
     'token': get_chain(o,
       'DEVAGENT_PROVIDER_OPENAI_EMBED_TOKEN',

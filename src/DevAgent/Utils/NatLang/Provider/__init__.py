@@ -33,6 +33,7 @@ def add_provider_to_registry(provider: str, registry: dict[str, ModelProvider] =
     from . import Azure
     match provider.split('Azure', maxsplit=1)[-1]:
       case 'OAI':
+        logger.debug(f'Loading Azure OpenAI Provider')
         load_provider_cfg = Azure.load_oai_provider_config
         load_chat_cfg = Azure.load_oai_chat_config
         load_embed_cfg = Azure.load_oai_embed_config
@@ -59,7 +60,7 @@ def add_provider_to_registry(provider: str, registry: dict[str, ModelProvider] =
   logger.debug(f'Loading Provider {provider} Config')
   provider_cfg = load_provider_cfg(**o)
   if chat_cfg is not None: provider_cfg |= { 'chat': chat_cfg }
-  if embed_cfg is not None: embed_cfg |= { 'embed': embed_cfg }
+  if embed_cfg is not None: provider_cfg |= { 'embed': embed_cfg }
 
   registry[provider] = provider_factory(cfg=provider_cfg)
 
@@ -72,6 +73,7 @@ def get_provider_name_from_map(kind: kind_t, **o) -> str:
   
 def load_provider_by_name_from_map(provider_name: str, requires: set[kind_t], registry = PROVIDER_REGISTRY, **o: str) -> ModelProvider:
   """Load a provider from a Flat Mapping of Configurables into the provided registry."""
+  logger.debug(f'Loading Provider by name {provider_name} requiring {requires}')
 
   if provider_name not in registry: add_provider_to_registry(provider_name, registry=registry, **o)
   assert provider_name in registry

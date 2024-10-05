@@ -12,7 +12,7 @@ from typing import Literal, TypedDict, Optional, Any
 from collections.abc import Iterable, Iterator, ByteString
 from dataclasses import dataclass
 
-raise NotImplementedError('Refactor to use the new NatLang Utils')
+# raise NotImplementedError('Refactor to use the new NatLang Utils')
 from ..Utils.NatLang import embed, chat
 
 logger = logging.getLogger(__name__)

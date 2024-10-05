@@ -42,20 +42,23 @@ def load_oai_chat_config(**o: str) -> ModelCfg:
   }
 
 def load_oai_embed_config(**o: str) -> ModelCfg:
-  return json.loads(o.get('DEVAGENT_PROVIDER_AZUREOAI_EMBED_CFG', json.dumps({
-    'model': 'text-embedding-3-large',
-    'inputSize': 8192,
-    'outputSize': 3072,
-    'outputDType': 'float32',
-  }))) | {
-    'endpoint': urllib.parse.urlparse(
-      o.get('DEVAGENT_PROVIDER_AZUREOAI_ENDPOINT', 'https://api.openai.com/v1/chat/completions')
-    ),
+  try: embed_cfg = o['DEVAGENT_PROVIDER_AZUREOAI_EMBED_CFG'] 
+  except KeyError:
+    logger.critical('Azure OpenAI Requires an explicit Embedding Model Config be declared')
+    raise
+  try: embed_endpoint = o['DEVAGENT_PROVIDER_AZUREOAI_EMBED_ENDPOINT'] 
+  except KeyError:
+    logger.critical('Azure OpenAI Requires an explicit Embedding Model Endpoint be declared')
+    raise
+
+  return json.loads(embed_cfg) | {
+    'endpoint': urllib.parse.urlparse(embed_endpoint),
     'token': get_chain(o,
       "DEVAGENT_PROVIDER_AZUREOAI_EMBED_TOKEN",
       "DEVAGENT_PROVIDER_AZUREOAI_TOKEN",
-    )
+    ),
   }
+
 
 def load_oai_provider_config(**o: str) -> ProviderCfg:
   return json.loads(o.get('DEVAGENT_PROVIDER_AZUREOAI_CFG', json.dumps({
