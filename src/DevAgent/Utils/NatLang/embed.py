@@ -125,8 +125,8 @@ class EmbeddingInterface(_Interface):
     ) as (status, resp):
       if status.major == 2: return Embedding.factory(
         *self.provider.embed_extract_content(resp.content),
-        shape=(self.provider.cfg['modelCfg']['outputSize'],),
-        dtype=self.provider.cfg['modelCfg']['outputDType'],
+        shape=(self.provider.cfg['embed']['outputSize'],),
+        dtype=self.provider.cfg['embed']['outputDType'],
         model=self.provider.embed_model_identifier,
       )
       elif status.major in {4, 5}:
