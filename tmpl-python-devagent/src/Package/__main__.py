@@ -5,7 +5,7 @@ The Entrypoint for the Package
 """
 from __future__ import annotations
 import logging, sys, os, asyncio, traceback, threading, signal, types
-from typing import NoReturn
+from typing import NoReturn, Literal
 from collections.abc import Iterable, MappingView, Coroutine, Callable
 from collections import deque
 
@@ -15,7 +15,14 @@ import Package
 
 logger = logging.getLogger(__name__)
 
+async def bar(bind_addr, quit_event) -> retry_action_t:
+  await Package.Bar(bind_addr, quit_event)
+  return 'stop'
+
 ### Runtime Boilerplate ###
+
+retry_action_t = Literal['restart', 'stop']
+TASK_RETRY_ACTIONS = { 'restart', 'stop' }
 
 async def loop_entrypoint(
   bind_addr: tuple[str, int],
@@ -32,7 +39,7 @@ async def loop_entrypoint(
   
   ### Schedule that Tasks
   enabled_tasks: dict[str, Callable[[], Coroutine]] = {
-    'Foo': lambda: Package.Bar(bind_addr, quit_event)
+    'Foo': lambda: bar(bind_addr, quit_event)
   }
   disabled_tasks: dict[str, Callable[[], Coroutine]] = {}
   inflight_tasks: dict[str, asyncio.Task] = {}
@@ -54,15 +61,25 @@ async def loop_entrypoint(
       _t = inflight_tasks.pop(name)
       assert _t is t
       ### Handle the Task State
-      if (e := t.exception()) is not None: logger.error(
-        f'Task {name} raised an exception...\n' 
-        + '\n'.join(traceback.format_exception(type(e), value=e, tb=t.get_stack()))
+      if (e := t.exception()) is not None: logger.error( # TODO: We should teardown when an unhandled exception occursa
+        f'Task {name} raised an unhandled exception...\n',
+        exc_info=e,
       )
       else:
-        if t.cancelled(): logger.debug(f'Task {name} was cancelled')
-        else: logger.debug(f'Task {name} completed')
-        logger.debug(f'Disabling Task b/c it finished: {name}')
-        disabled_tasks[name] = enabled_tasks.pop(name)
+        if t.cancelled():
+          logger.debug(f'Task {name} was cancelled')
+          retry_action: retry_action_t = 'stop'
+        else:
+          logger.debug(f'Task {name} completed')
+          retry_action: retry_action_t = t.result()
+          assert retry_action in TASK_RETRY_ACTIONS
+        if retry_action in {'stop', }:
+          logger.debug(f'Disabling Task `{name}` b/c it returned: {retry_action}')
+          disabled_tasks[name] = enabled_tasks.pop(name)
+        elif retry_action in {'restart', }:
+          logger.debug(f'Restarting Task `{name}` b/c it returned: {retry_action}')
+        else:
+          raise NotImplementedError(f'Retry Action: {retry_action}')
 
 def main(argv: Iterable[str], env: MappingView[str, str]) -> int:
   """The Main Function"""
