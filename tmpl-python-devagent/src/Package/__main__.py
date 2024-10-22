@@ -4,7 +4,7 @@ The Entrypoint for the Package
 
 """
 from __future__ import annotations
-import logging, sys, os, asyncio, traceback, threading, signal, types
+import logging, sys, os, asyncio, uvloop, traceback, threading, signal, types
 from typing import NoReturn, Literal
 from collections.abc import Iterable, MappingView, Coroutine, Callable
 from collections import deque
@@ -110,6 +110,7 @@ def main(argv: Iterable[str], env: MappingView[str, str]) -> int:
     nonlocal thread_state, aio_loop
     thread_state |= { 'status': 'running' }
     logger.debug('Spawning Event Loop')
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy()) # Register uvloop as the Event Loop Provider
     aio_loop = asyncio.new_event_loop()
     try:
       logger.debug('Running Event Loop Entrypoint')
