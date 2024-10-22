@@ -5,6 +5,7 @@ uvloop ~= 0.21 # Replaces the asyncio event loop w/ libuv
 # loguru ~= 0.7 # Quick Logging
 # PyYAML ~= 6.0 # YAML Parsing
 # orjson ~= 3.10 # Faster JSON Parsing
+# requests ~= 2.32 # Synchronous HTTP Client/Server
 # aiohttp ~= 3.10 # Async HTTP Client/Server
 # aiofiles ~= 24.1 # Async File I/O (Thread Pooling)
 # psycopg[binary] ~= 3.2 # PostgreSQL Async Driver
