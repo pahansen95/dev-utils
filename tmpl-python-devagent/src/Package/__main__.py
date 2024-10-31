@@ -25,25 +25,49 @@ retry_action_t = Literal['restart', 'stop']
 TASK_RETRY_ACTIONS = { 'restart', 'stop' }
 
 async def loop_entrypoint(
-  bind_addr: tuple[str, int],
-  quit_event: asyncio.Event,
+  teardown: asyncio.Event,
 ) -> None:
   """The Entrypoint of the AsyncIO Loop"""
-  logger.debug(f"Entering Event Loop Entry Point: {bind_addr=}")
+  logger.debug(f"Entering Event Loop Entry Point")
 
   # ### NOTE: Debugging
-  # await quit_event.wait()
+  # await teardown.wait()
   # logger.debug('Loop Entrypoint Returning')
   # return
   # ###
   
   ### Schedule that Tasks
   enabled_tasks: dict[str, Callable[[], Coroutine]] = {
-    'Foo': lambda: bar(bind_addr, quit_event)
+    'SYS_teardown': lambda: teardown.wait(),
+    'Bar': lambda: bar(), # TODO: Make Configurable
   }
   disabled_tasks: dict[str, Callable[[], Coroutine]] = {}
   inflight_tasks: dict[str, asyncio.Task] = {}
-  while len(enabled_tasks) > 0:
+  def _cancel_tasks(tasks: dict[str, asyncio.Task]):
+    for n, t in {
+      n: t for n, t in tasks.items()
+      if not (t.done() or t.cancelling())
+    }.items():
+      logger.debug(f'Cancelling Task {n}')
+      t.cancel()
+  async def _teardown():
+    nonlocal disabled_tasks, enabled_tasks
+    disabled_tasks |= enabled_tasks
+    enabled_tasks = {}
+    _cancel_tasks(inflight_tasks)
+    if len(inflight_tasks.values()) > 0: await asyncio.wait(inflight_tasks.values()) # Wait for all tasks to complete
+    panic = False
+    for n, t in inflight_tasks.items():
+      if (exc := t.exception()) is not None and not isinstance(exc, asyncio.CancelledError):
+        panic = True
+        logger.critical(f'Unhandled Error raised by Task {n}', exc_info=exc)
+    if panic: raise RuntimeError('Unhandled Task Exceptions encountered when tearing down Event Loop')
+    raise asyncio.CancelledError('Loop Entrypoint Cancelled')
+
+  while len(filter(
+    lambda k: not k.startswith('SYS_'),
+    enabled_tasks
+  )) > 0:
     ### Schedule the Tasks
     for name, factory in enabled_tasks.items():
       if name not in inflight_tasks:
@@ -61,25 +85,42 @@ async def loop_entrypoint(
       _t = inflight_tasks.pop(name)
       assert _t is t
       ### Handle the Task State
-      if (e := t.exception()) is not None: logger.error( # TODO: We should teardown when an unhandled exception occursa
-        f'Task {name} raised an unhandled exception...\n',
-        exc_info=e,
-      )
-      else:
+      if name.startswith('SYS_'): # Handle System Tasks
+        _name = name.split('_', maxsplit=1)[-1]
+        logger.debug(f'System Task {_name} Completed')
+        if _name == 'teardown':
+          # Disable all tasks
+          disabled_tasks |= enabled_tasks
+          enabled_tasks.clear()
+        else: raise NotImplementedError(f'Unhandled System Task {name}')
+      elif (e := t.exception()) is not None: # Handle Unhandled Errors
+        logger.error(
+          f'Task {name} raised an unhandled exception...\n',
+          exc_info=e,
+        )
+        logger.info(f'Disabling all Tasks in response to the unhandled error raised by Task {name}')
+        # Disable all tasks
+        disabled_tasks |= enabled_tasks
+        enabled_tasks.clear()
+      else: # Handle User Tasks
+        assert not name.startswith('SYS_')
         if t.cancelled():
-          logger.debug(f'Task {name} was cancelled')
+          logger.debug(f'User Task {name} was cancelled')
           retry_action: retry_action_t = 'stop'
         else:
-          logger.debug(f'Task {name} completed')
+          logger.debug(f'User Task {name} completed')
           retry_action: retry_action_t = t.result()
           assert retry_action in TASK_RETRY_ACTIONS
         if retry_action in {'stop', }:
-          logger.debug(f'Disabling Task `{name}` b/c it returned: {retry_action}')
+          logger.debug(f'Disabling User Task `{name}` b/c it returned: {retry_action}')
           disabled_tasks[name] = enabled_tasks.pop(name)
         elif retry_action in {'restart', }:
-          logger.debug(f'Restarting Task `{name}` b/c it returned: {retry_action}')
+          logger.debug(f'Restarting User Task `{name}` b/c it returned: {retry_action}')
         else:
           raise NotImplementedError(f'Retry Action: {retry_action}')
+  
+  logger.info('All user tasks have completed; Tearing Down Event Loop')
+  await _teardown()
 
 def main(argv: Iterable[str], env: MappingView[str, str]) -> int:
   """The Main Function"""
@@ -89,16 +130,16 @@ def main(argv: Iterable[str], env: MappingView[str, str]) -> int:
   logger.debug(f'{flags=}')
 
   ### Parse Flags
-  def _parse_bind(bind: str) -> tuple[str, int]:
-    try: addr, port = bind.split(':', maxsplit=1)
-    except ValueError: addr = bind
-    if not addr: addr = '127.0.0.1' # If user doesn't specify an address, then assume loopback
-    if not port: port = '8080' # If user doesn't specify a port, then assume 8080
-    return addr, int(port, base=10)
+  # def _parse_bind(bind: str) -> tuple[str, int]:
+  #   try: addr, port = bind.split(':', maxsplit=1)
+  #   except ValueError: addr = bind
+  #   if not addr: addr = '127.0.0.1' # If user doesn't specify an address, then assume loopback
+  #   if not port: port = '8080' # If user doesn't specify a port, then assume 8080
+  #   return addr, int(port, base=10)
 
   ### Set the Kwargs for the AIO Loop's Entrypoint
   loop_kwargs = {
-    'bind_addr': _parse_bind(flags.get('bind', '127.0.0.1:50080')) # Set a default
+    # 'bind_addr': _parse_bind(flags.get('bind', '127.0.0.1:50080')) # Set a default
   }
 
   ### Setup the AsyncIO Loop in another thread
