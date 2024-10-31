@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 def load_chat_config(**o: str) -> ModelCfg:
   return json.loads(o.get('DEVAGENT_PROVIDER_ANTHROPIC_CHAT_CFG', json.dumps({
-    'model': 'claude-3-5-sonnet-20240620',
+    'model': 'claude-3-5-sonnet-20241022',
     'inputSize': 200_000,
     'outputSize': 8192,
   }))) | {
