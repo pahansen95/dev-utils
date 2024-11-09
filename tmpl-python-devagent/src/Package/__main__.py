@@ -64,10 +64,10 @@ async def loop_entrypoint(
     if panic: raise RuntimeError('Unhandled Task Exceptions encountered when tearing down Event Loop')
     raise asyncio.CancelledError('Loop Entrypoint Cancelled')
 
-  while len(filter(
+  while len(list(filter(
     lambda k: not k.startswith('SYS_'),
     enabled_tasks
-  )) > 0:
+  ))) > 0:
     ### Schedule the Tasks
     for name, factory in enabled_tasks.items():
       if name not in inflight_tasks:
@@ -158,7 +158,7 @@ def main(argv: Iterable[str], env: MappingView[str, str]) -> int:
       aio_loop.run_until_complete(
         loop_entrypoint(
           **loop_kwargs,
-          quit_event=aio_quit,
+          teardown=aio_quit,
         ),
       )
       logger.debug('Event Loop Entrypoint Completed')
