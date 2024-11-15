@@ -5,6 +5,8 @@
 # loguru ~= 0.7 # Quick Logging
 # PyYAML ~= 6.0 # YAML Parsing
 # orjson ~= 3.10 # Faster JSON Parsing
+# cryptography ~= 43.0 # Cryptography Primitives Library
+# cffi ~= 1.17 # C Foreign Function Interface
 # requests ~= 2.32 # Synchronous HTTP Client/Server
 # aiohttp ~= 3.10 # Async HTTP Client/Server
 # aiofiles ~= 24.1 # Async File I/O (Thread Pooling)
