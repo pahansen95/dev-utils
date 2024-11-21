@@ -113,7 +113,9 @@ async def loop_entrypoint(
           assert retry_action in TASK_RETRY_ACTIONS
         if retry_action in {'stop', }:
           logger.debug(f'Disabling User Task `{name}` b/c it returned: {retry_action}')
-          disabled_tasks[name] = enabled_tasks.pop(name)
+          if name not in disabled_tasks: # Handle Case where Teardown forced the task to be disabled
+            assert name in enabled_tasks
+            disabled_tasks[name] = enabled_tasks.pop(name)
         elif retry_action in {'restart', }:
           logger.debug(f'Restarting User Task `{name}` b/c it returned: {retry_action}')
         else:
