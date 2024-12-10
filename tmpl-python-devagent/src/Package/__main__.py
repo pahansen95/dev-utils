@@ -20,10 +20,31 @@ def main(
   stdout: TextIO,
 ) -> bool:
 
-  logger.info('MAIN')
+  class E(Exception): ...
 
-  subcmd = args.popleft()
+  def _pop_arg(name: str) -> str:
+    try: return args.popleft()
+    except IndexError: raise E(f'missing positional arg: `{name.upper()}`')
 
+  try:
+
+    subcmd = _pop_arg('subcmd')
+
+    if subcmd == 'foo':
+
+      try: ... # TODO
+      except Exception as e: raise E('Failed to FOO') from e
+
+    elif subcmd == 'bar':
+
+      try: ... # TODO
+      except Exception as e: raise E('Failed to BAR') from e
+
+    else: raise E(f'Unknown Subcommand: {subcmd}')
+
+  except E as e:
+    logger.critical(str(e))
+    return False
   return True
 
 class CLI:
