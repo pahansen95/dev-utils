@@ -1,5 +1,6 @@
 ### Some Helpful Imports ###
 
+# pex ~= 2.25 # Python EXecutable Builder
 # uvloop ~= 0.21 # Replaces the asyncio event loop w/ libuv
 # tqdm ~= 4.66 # Progress Meter
 # loguru ~= 0.7 # Quick Logging
