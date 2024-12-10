@@ -4,10 +4,13 @@ The Package Entrypoint
 
 """
 
-import logging, os, sys, contextlib
+import logging, os, sys, contextlib, pathlib
 from typing import TextIO
 from collections import deque
-logger = logging.getLogger(__name__)
+
+SCRIPT = pathlib.Path(__file__)
+CONTEXT = SCRIPT.parent # The context of Script
+logger = logging.getLogger(__package__ if __name__ == '__main__' else __name__)
 
 def main(
   args: deque[str],
