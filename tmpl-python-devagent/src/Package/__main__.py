@@ -25,6 +25,11 @@ def main(
   def _pop_arg(name: str) -> str:
     try: return args.popleft()
     except IndexError: raise E(f'missing positional arg: `{name.upper()}`')
+  NO_DEFAULT = type('NO_DEFAULT', (), {})
+  def _get_kwarg(k: str, default: str | type[NO_DEFAULT] = NO_DEFAULT) -> str:
+    assert default is NO_DEFAULT or isinstance(default, str)
+    try: return kwargs.get(k, default) if default is not NO_DEFAULT else kwargs[k]
+    except KeyError: raise E(f'Missing Expected Flag: `--{k}`')
 
   try:
 
