@@ -6,7 +6,7 @@ The Entrypoint for the Package
 from __future__ import annotations
 import logging, sys, os, asyncio, traceback, threading, signal, types
 from typing import NoReturn, Literal
-from collections.abc import Iterable, MappingView, Coroutine, Callable
+from collections.abc import Iterable, Mapping, Coroutine, Callable
 from collections import deque
 
 ### Package Imports
@@ -124,7 +124,7 @@ async def loop_entrypoint(
   logger.info('All user tasks have completed; Tearing Down Event Loop')
   await _teardown()
 
-def main(argv: Iterable[str], env: MappingView[str, str]) -> int:
+def main(argv: Iterable[str], env: Mapping[str, str]) -> int:
   """The Main Function"""
   args = deque(a for a in argv if not a.startswith('-'))
   logger.debug(f'{args=}')
