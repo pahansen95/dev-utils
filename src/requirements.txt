@@ -1,13 +1,13 @@
 ### Some Helpful Imports ###
 
 # pex ~= 2.25 # Python EXecutable Builder
-# uvloop ~= 0.21 # Replaces the asyncio event loop w/ libuv
+uvloop ~= 0.21 # Replaces the asyncio event loop w/ libuv
 # tqdm ~= 4.66 # Progress Meter
 # loguru ~= 0.7 # Quick Logging
 # PyYAML ~= 6.0 # YAML Parsing
-# orjson ~= 3.10 # Faster JSON Parsing
+orjson ~= 3.10 # Faster JSON Parsing
 # cryptography ~= 43.0 # Cryptography Primitives Library
-# cffi ~= 1.17 # C Foreign Function Interface
+cffi ~= 1.17 # C Foreign Function Interface
 # requests ~= 2.32 # Synchronous HTTP Client/Server
 # aiohttp ~= 3.10 # Async HTTP Client/Server
 # aiofiles ~= 24.1 # Async File I/O (Thread Pooling)
