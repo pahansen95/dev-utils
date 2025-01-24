@@ -5,14 +5,13 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
   const target = b.standardTargetOptions(.{});
   const optimize = b.standardOptimizeOption(.{});
-  const so = b.addSharedLibrary(.{
-    .name = "proc",
-    .root_module = .{
-      .owner = b,
-      .root_source_file = b.path("proc.zig"),
-      .resolved_target = target,
-      .optimize = optimize,
-    },
+  const py_lib = b.addSharedLibrary(.{
+    .name = "PyModuleProc",
+    .root_source_file = b.path("py.zig"),
+    // .root_source_file = b.path("src/clone.zig"),
+    .target = target,
+    .optimize = optimize,
   });
-  b.installArtifact(so);
+  py_lib.linkLibC();
+  b.installArtifact(py_lib);
 }
