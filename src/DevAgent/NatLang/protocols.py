@@ -7,14 +7,14 @@ Concrete implementations which implement the set of state & functionality of a s
 
 """
 from __future__ import annotations
+from typing import TypeVar, Generic
 from abc import *
 from types import *
-from typing import *
 from collections.abc import *
 
 ### SemanticType Meta
 class SemanticType(ABC):
-  def __init__(self): raise RuntimeError # Don't allow subclassing of SemanticTypes
+  def __init__(self): raise RuntimeError # Don't allow instantiation of SemanticTypes
 
 ### Typing
 
@@ -45,8 +45,8 @@ class Edge(SemanticType, Generic[T]):
   def __hash__(self) -> int: ...
 class Graph(SemanticType, Generic[T]):
   """A Graph represents a set of related entities connected by directed edges."""
-  node: AbstractSet[Node[T]]
-  edges: AbstractSet[Edge[T]] 
+  node: Set[Node[T]]
+  edges: Set[Edge[T]] 
   def adjacency(self) -> Mapping[Node[T], Iterator[Node[T]]]: ...
 
 class Properties(MutableMapping[str, T]):
@@ -55,13 +55,13 @@ class Properties(MutableMapping[str, T]):
 class Agent(SemanticType):
   """Some entity participating in a Conversation; for example a LLM or a user"""
   name: str
-  props: Optional[Properties]
+  props: Properties | None
 
 class Message(SemanticType):
   """A Single Message in a Conversation"""
   role: ROLE
   content: CONTENT
-  props: Optional[Properties]
+  props: Properties | None
 
 class Embedding(SemanticType):
   """A Batch of Latents; design based on a NumPy ndarray"""
@@ -71,7 +71,7 @@ class Embedding(SemanticType):
   """The shape of the batch of latents; expected to be (batch_size, *latent_dimensions)"""
   dtype: str
   """The Data Type of the buffer; ex. f32 or u8"""
-  props: Optional[Properties]
+  props: Properties | None
 
 class Conversation(SemanticType, Graph[Message]):
   """A set of messages, forming causal relationships between each other"""
