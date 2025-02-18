@@ -57,7 +57,7 @@ class Message(SemanticType, TypedDict):
   content: CONTENT
   props: NotRequired[Properties]
 
-class Embedding(SemanticType):
+class Embedding(SemanticType, TypedDict):
   """A Batch of Latents; design based on a NumPy ndarray"""
   buffer: Sequence[LATENT]
   """The batch of Latents; usually a continuous buffer of memory"""
@@ -65,7 +65,7 @@ class Embedding(SemanticType):
   """The shape of the batch of latents; expected to be (batch_size, *latent_dimensions)"""
   dtype: str
   """The Data Type of the buffer; ex. f32 or u8"""
-  props: Properties | None
+  props: NotRequired[Properties]
 
 class Conversation(SemanticType, Graph[Message]):
   """A set of messages, forming causal relationships between each other"""
