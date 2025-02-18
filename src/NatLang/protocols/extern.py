@@ -43,7 +43,7 @@ class Graph(SemanticType, Generic[T]):
   def add_edges(self, *edge: Edge[T]): ...
   def get_roots(self) -> Sequence[Node[T]]: ...
 
-class Properties(MutableMapping[str, T]):
+class Properties(TypedDict, total=False):
   """Contextual Metadata"""
 
 class Agent(SemanticType):
@@ -51,11 +51,11 @@ class Agent(SemanticType):
   name: str
   props: Properties | None
 
-class Message(SemanticType):
+class Message(SemanticType, TypedDict):
   """A Single Message in a Conversation"""
   role: ROLE
   content: CONTENT
-  props: Properties | None
+  props: NotRequired[Properties]
 
 class Embedding(SemanticType):
   """A Batch of Latents; design based on a NumPy ndarray"""

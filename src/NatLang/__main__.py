@@ -40,10 +40,7 @@ def chat(
   except: # Otherwise treat it like a single message
     convo: p.Conversation = ...
     content: p.CONTENT = content_stream
-    chat_msg: p.Message = {
-      'role': 'user',
-      'content': content,
-    }
+    chat_msg: p.Message = { 'role': 'user', 'content': content }
     convo.add_nodes(chat_msg)
 
   chat_logs = convo.chat_logs()
@@ -57,11 +54,10 @@ def chat(
   logger.info(f'Last message in the chat is from a `{chat_log[-1].role}`')
 
   ### Prompt the LLM
-  _log_prefix = llm.parse_instructions( { 'role': 'system', 'content': ... } )   
+  instructions = llm.parse_instructions( { 'role': 'system', 'content': ... } )   
   with model_tuner as _model:
-    assert _model is llm and _model.chat is not None and _model.chat is chat
-    assert llm.props is custom_properties
-    resp = chat( *( _log_prefix + chat_log ) )
+    assert _model is llm and _model.chat is chat and llm.props is custom_properties
+    resp = chat( *( instructions + chat_log ) )
     
   assert resp.role == 'assistant'
   convo.add_nodes(resp)
