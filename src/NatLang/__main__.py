@@ -22,14 +22,14 @@ def chat(
 
   ### TODO: Load the Model Provider & Config
 
-  provider: p.ModelProvider = ...
-  session: p.ModelSession = ...
-  llm: p.Model = provider.models[session.name]
+  model_name: str = ...
+  provider: p.ModelProvider = ... # TODO: Inject ProviderSession
+  llm: p.Model = provider.models[model_name]
   if llm.chat is None: raise RuntimeError(f'Model {llm.name} does not support Chat')
   chat = llm.chat
   custom_properties: p.Properties | None = None # TODO: Load custom properties
   if custom_properties is None: custom_properties = llm.props # Use default properties
-  model_tuner: p.ModelTuner = ... # TODO
+  model_tuner: p.ModelTuner = ...
   marshal: p.SeDer.Marshal[p.Conversation] = ...
   unmarshal: p.SeDer.Unmarshal[p.Conversation] = ...
 
@@ -38,7 +38,7 @@ def chat(
   try: # First attempt ot load 
     convo: p.Conversation = unmarshal(content_stream)
   except: # Otherwise treat it like a single message
-    convo: p.Conversation = ... # TODO
+    convo: p.Conversation = ...
     content: p.CONTENT = content_stream
     chat_msg: p.Message = {
       'role': 'user',

@@ -117,10 +117,8 @@ class ModelProvider(SemanticType):
   """A Provider of a Large Language Model"""
   models: dict[str, Model]
 
-class ModelSession(SemanticType):
-  """An Stateful session w/ a Model via it's provider"""
-  name: str
-  """The Model Name"""
+class ProviderSession(SemanticType):
+  """An stateful session w/ a Model Provider"""
   provider: ModelProvider
   """The Model Provider"""
 
@@ -140,10 +138,10 @@ __all__ = [
   "Message",
   "Model",
   "ModelProvider",
-  "ModelSession",
   "ModelTuner",
   "Node",
   "Properties",
+  "ProviderSession",
   "ROLE",
   "SeDer",
   "T",
