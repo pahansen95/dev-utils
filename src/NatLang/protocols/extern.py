@@ -83,7 +83,7 @@ class SeDer(SemanticType, Generic[T]):
     def __call__(self, b: ByteString) -> T: ...
 
 class Chat(SemanticType):
-  """A Prompt-Reply turn contextualized within a chat"""
+  """A Prompt-Reply turn contextualized to a chat log"""
   def __call__(self, *msg: Message) -> Message: ...
 
 class Embed(SemanticType):
