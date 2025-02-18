@@ -61,7 +61,7 @@ class Embedding(SemanticType, TypedDict):
   """A Batch of Latents; design based on a NumPy ndarray"""
   buffer: Sequence[LATENT]
   """The batch of Latents; usually a continuous buffer of memory"""
-  shape: tuple[int, ...]
+  shape: Sequence[int]
   """The shape of the batch of latents; expected to be (batch_size, *latent_dimensions)"""
   dtype: str
   """The Data Type of the buffer; ex. f32 or u8"""
@@ -69,7 +69,8 @@ class Embedding(SemanticType, TypedDict):
 
 class Conversation(SemanticType, Graph[Message]):
   """A set of messages, forming causal relationships between each other"""
-  def chat_logs(self) -> Iterator[ChatLog]: ...
+  def chat_logs(self) -> Iterator[ChatLog]:
+    """A lazy loaded sequence of Chat Logs available in the conversation"""
 
 class ChatLog(SemanticType, Sequence[Message]):
   """A causally ordered sequence of messages in a conversation; ie. A single path in the conversational graph"""
