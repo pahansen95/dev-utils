@@ -5,7 +5,7 @@ from collections.abc import Callable, Generator
 from dataclasses import dataclass, field, fields, KW_ONLY
 from functools import wraps
 
-import logging, contextlib
+import logging, time
 
 from ..Protocols import intern as p
 
@@ -47,6 +47,7 @@ class Retry:
   handle_exc: Callable[[type[Exception], Exception, TracebackType], bool] = field(default=None)
   handle_result: Callable[[R], bool] = field(default=None)
   attempts: int = 3
+  backoff: Callable[[int], float] = field(default=None)
 
   def _handle_exc(self, exc_type: type[Exception], exc: Exception, tb: TracebackType) -> bool:
     if self.handle_exc is None: raise exc
@@ -55,6 +56,14 @@ class Retry:
   def _handle_result(self, res: R | type[Retry]) -> bool:
     if self.handle_result is None: return not ( res is Retry )
     else: return self.handle_result(res)
+  
+  def _backoff(self, idx: int) -> float:
+    try:
+      if self.backoff is None: return ( 0, 0.05, 0.1, 0.5, 1 )[idx]
+      else: return self.backoff(idx)
+    except IndexError:
+      logger.warning(f'couldnt get a backoff value in seconds for retry {idx+1}; returning default of 1s')
+      return 1
 
   def _eval(self,
     fn: Callable[P, R],
@@ -71,6 +80,7 @@ class Retry:
         logger.debug(f'fn[`{fn.__name__}`] evaluation attempt {idx+1} of {self.attempts+1}')
         ok, res = self._eval(fn, *args, **kwargs)
         if ok: return res
+        else: time.sleep(self._backoff(idx)) # TODO: There's probably better things to do than block the thread
       raise RuntimeError(f'fn[`{fn.__name__}`] failed evaluation after {self.attempts+1} total attempts')
     return _retry_fn
 
