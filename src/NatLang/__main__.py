@@ -8,7 +8,7 @@ import logging, os, sys, contextlib, pathlib, io, json
 from typing import TextIO, BinaryIO
 from collections import deque
 
-from NatLang import protocols as p
+from NatLang import Protocols as p
 
 SCRIPT = pathlib.Path(__file__)
 CONTEXT = SCRIPT.parent # The context of Script

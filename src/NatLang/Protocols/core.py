@@ -6,4 +6,4 @@ from collections.abc import *
 
 ### SemanticType Meta
 class SemanticType:
-  def __init__(self): raise RuntimeError # Don't allow instantiation of SemanticTypes
+  def __init__(self): raise TypeError('SemanticType cannot be instantiated direcctly')
