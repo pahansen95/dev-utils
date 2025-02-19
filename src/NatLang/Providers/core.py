@@ -1,17 +1,17 @@
 from __future__ import annotations
 from types import TracebackType
-from typing import Any, Literal, TypedDict, Required, TypeVar, Generic, ContextManager, ParamSpec
+from typing import Any, Literal, TypedDict, Required, NotRequired, TypeVar, Generic, ContextManager, ParamSpec
 from collections.abc import Callable, Generator
 from dataclasses import dataclass, field, fields, KW_ONLY
 from functools import wraps
 
-import logging, time
+import logging, time, json
 
 from ..Protocols import intern as p
 
 logger = logging.getLogger()
 
-class ModelCfg(TypedDict, total=False):
+class ModelCfg(p.ModelCfg, TypedDict, total=False):
   version: Required[str]
   """The fully qualified versioned name identifying this model in the Provider API"""
   inputSize: Required[int]
@@ -22,13 +22,12 @@ class ModelCfg(TypedDict, total=False):
   """The maximum allowed token output"""
   outputDType: str
   """Expected datatype of the output"""
-  opts: dict[str, Any]
-  """Runtime Tuning Parameters"""
 
 @dataclass
 class Model(p.Model):
   name: str
   cfg: ModelCfg
+  props: dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class ModelProvider(p.ModelProvider):
@@ -37,6 +36,12 @@ class ModelProvider(p.ModelProvider):
 @dataclass
 class ProviderSession(p.ProviderSession):
   provider: ModelProvider
+
+@dataclass
+class ProviderError(RuntimeError):
+  obj: dict
+  """The Error Object; JSON Encodable"""
+  def __str__(self) -> str: return json.dumps(self.obj, separators=(':',','))
 
 ### Helpers
 

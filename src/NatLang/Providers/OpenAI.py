@@ -16,10 +16,9 @@ logger = logging.getLogger(__name__)
 CHAT_MODELS: dict[str, Model] = {}
 EMBED_MODELS: dict[str, Model] = {}
 
-@dataclass()
+@dataclass
 class GPT(Model):
   name: Literal['gpt-4o', 'gpt-4o-mini']
-  cfg: ModelCfg
 
 CHAT_MODELS |= { m.name: m for m in (
   GPT(
@@ -51,7 +50,6 @@ CHAT_MODELS |= { m.name: m for m in (
 @dataclass
 class Reasoning(Model):
   name: Literal['o1', 'o1-mini', 'o3-mini']
-  props: dict | None = None
 
 CHAT_MODELS |= { m.name: m for m in (
   Reasoning(
@@ -60,7 +58,10 @@ CHAT_MODELS |= { m.name: m for m in (
       'version': 'o1',
       'inputSize': 200_000,
       'outputSize': 100_000,
-    }
+    },
+    {
+      'reasoning_effort': 'low'
+    },
   ),
   Reasoning(
     'o1-mini',
@@ -68,7 +69,10 @@ CHAT_MODELS |= { m.name: m for m in (
       'version': 'o1-mini',
       'inputSize': 128_000,
       'outputSize': 65_536,
-    }
+    },
+    {
+      'reasoning_effort': 'low'
+    },
   ),
   Reasoning(
     'o3-mini',
@@ -76,14 +80,16 @@ CHAT_MODELS |= { m.name: m for m in (
       'version': 'o3-mini',
       'inputSize': 200_000,
       'outputSize': 100_000,
-    }
+    },
+    {
+      'reasoning_effort': 'low'
+    },
   ),
 ) }
 
 @dataclass
 class TextEmbedding(Model):
   name: Literal['text-embedding-3-large', 'text-embedding-3-small']
-  props: dict | None = None
 
 EMBED_MODELS |= {
   'text-embedding-3-large': TextEmbedding(
@@ -105,6 +111,18 @@ EMBED_MODELS |= {
     }
   ),
 }
+
+class MessageV1(TypedDict):
+  role: Literal['system', 'user', 'assistant']
+  content: str
+  name: NotRequired[str]
+
+class MessageV2(TypedDict):
+  role: Literal['developer', 'user', 'assistant']
+  content: str
+  name: NotRequired[str]
+
+MSG_T = type[MessageV1 | MessageV2]
 
 REQ_RESP_T = tuple[
   tuple[int, int],
@@ -128,7 +146,7 @@ class OpenAISession(ProviderSession):
     route = route.lstrip('/')
     with self.session.request(
       method, f'{url}/{route}',
-      headers=( headers | self.headers ),
+      headers=( headers | self.headers ), # TODO: Inject Auth Headers
       json=body,
     ) as resp:
       yield (
@@ -148,9 +166,9 @@ class OpenAISession(ProviderSession):
       resp,
     ):
       if major in { 5 }: return Retry
-      elif major in { 4 }: resp.raise_for_status()
+      elif major in { 4 }: raise ProviderError( obj=( { 'kind': 'error' } | resp.json() ) )
       assert major in { 2 }
-      return resp.json()
+      return { 'kind': 'reply' } | resp.json()
 
 @dataclass
 class OpenAIProvider(ModelProvider):
@@ -158,14 +176,30 @@ class OpenAIProvider(ModelProvider):
   session: OpenAISession = field(default_factory=OpenAISession)
   _: KW_ONLY
 
-  def chat(self):
-    resp = self.session.retry_json_request(
-      '/chat/completions',
-      {
-        # TODO...
-      },
-    )
-    # TODO: Extract what we need from the Content from the API Response
+  def chat(self, model_name: str, *messages: dict) -> str:
+    model = self.models[model_name]
+
+    if isinstance(model, GPT):
+      ... # TODO: Convert Library Messages to OpenAI V1 Messages
+    elif isinstance(model, Reasoning):
+      ... # TODO: Convert Library Messages to OpenAI V2 Messages
+    else: raise TypeError(type(model))
+
+    try:
+      resp = self.session.retry_json_request(
+        route='/chat/completions',
+        body=( model.props | {
+          'model': model.cfg['version'],
+          'messages': messages,
+        } ),
+      )
+      assert resp['kind'] == 'reply'
+    except ProviderError as e:
+      assert e.obj['kind'] == 'error'
+      err_msg = f'OpenAI Provider Error: {e}'
+      logger.debug(err_msg)
+      raise RuntimeError(err_msg) from e
+    else: return ['choices'][0]['message']['content']
 
   def embed(self):
     ...

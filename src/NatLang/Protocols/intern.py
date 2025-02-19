@@ -91,12 +91,28 @@ class Embed(SemanticType):
   """A Process to encode semantics from textual to numerical formats"""
   def __call__(self, chunk: CONTENT) -> Embedding: ...
 
+class ModelCfg(SemanticType, TypedDict, total=False):
+  version: Required[str]
+  """The fully qualified versioned name identifying this model in the Provider API"""
+  inputSize: Required[int]
+  """The total allowed token input"""
+  inputDType: str
+  """Expected datatype of the input"""
+  outputSize: Required[int]
+  """The maximum allowed token output"""
+  outputDType: str
+  """Expected datatype of the output"""
+  opts: dict[str, Any]
+  """Runtime Tuning Parameters"""
+
 class Model(SemanticType):
   """A Large Language Model"""
   name: str
   """Identifying Name of the Model"""
-  props: Properties | None
-  """Default Runtime Properties of the Model"""
+  cfg: ModelCfg
+  """Static Configuration detailing Model"""
+  opts: Properties | None
+  """Runtime Specific Configuration of the Model"""
 
   ### Method Protocols
   chat: Chat | None
