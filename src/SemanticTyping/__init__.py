@@ -32,21 +32,18 @@ in a format that can be analyzed & reasoned on in a group setting.
 ## Quick Start
 
 ```Python
-
-From SemanticTyping import Semantic
+from SemanticTyping import Semantic, SemanticMeta, Implements, ClsVar, Factory
 from typing import *
 from collections.abc import *
-from dataclasses import *
 
 ### First define the Mental Models (ie. Semantic Models)
 
-T = TypeVar('T')
-class ConsumableResource(Semantic[T]):
+class ConsumableResource[T](Semantic):
   resource_registry: set[T]
   def __enter__(self) -> T: ...
   def __exit__(self, exc_t, exc, tb): ...
 
-class Server(Semantic[T]):
+class Server[T](Semantic):
   max_conn: int
   def bind(self, fd: int, addr: str): ...
   def listen(self, fd: int) -> T: ...
@@ -55,11 +52,10 @@ class Server(Semantic[T]):
 ### Next define the Computational Models
 # NOTE: We've ommitted the concrete implementation for brevity
 
-@dataclass
-class UnixSocket(ConsumableResource[int], Server[BinaryIO]):
-  resource_registry: set[int] = field(default_factory=set)
+class UnixSocket(Implements, ConsumableResource[int], Server[BinaryIO]):
+  resource_registry: set[int] = Factory(lambda _: set)
   """The file descriptors for all currently allocated Unix Sockets managed by the object"""
-  max_conn: int = field(default=10)
+  max_conn: int = 10
   """The total number of active client connections per socket"""
   def __enter__(self) -> int:
     """Allocate a new Unix Socket & return the referrant file descriptor"""
