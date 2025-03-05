@@ -7,6 +7,16 @@ from __future__ import annotations
 from .core import *
 from .protocols import *
 
+__all__ = [
+  'Diff',
+  'TreeDiff',
+  'TopologyDiff',
+  'SemanticDiff',
+  'calc_tree_diff',
+  'calc_topology_diff',
+  'calc_semantic_diff',
+]
+
 @dataclass
 class Diff[T]:
   """A Diff between two sets of items"""
@@ -18,6 +28,8 @@ class Diff[T]:
   right: frozenset[T]
   """Uniqueness to the right tree"""
 
+  def __bool__(self) -> bool: return bool(self.left) or bool(self.right)
+
 @dataclass
 class TreeDiff[EK]:
   """The Diff between two trees"""
@@ -26,6 +38,8 @@ class TreeDiff[EK]:
   """Topological Difference"""
   semantics: SemanticDiff
   """Semantic Difference"""
+
+  def __bool__(self) -> bool: return bool(self.topology) or bool(self.semantics)
 
 @dataclass
 class TopologyDiff[EK]:
@@ -38,6 +52,8 @@ class TopologyDiff[EK]:
   edges: dict[EK, Diff[Edge[EK]]]
   """Diff in Edges, grouped by Edge Key"""
 
+  def __bool__(self) -> bool: return bool(self.nodes) or bool(self.keys) or any(map(bool, self.edges.values()))
+
 @dataclass
 class SemanticDiff:
   """Tree Diff with respect to it's semantics"""
@@ -47,7 +63,9 @@ class SemanticDiff:
   aggregate: Diff[HASH_T]
   """The difference of the entire set of semantics contained per tree ignoring topology"""
 
-def calc_diff[NT, EK](lt: Tree[NT, EK], rt: Tree[NT, EK]) -> TreeDiff[NT, EK]:
+  def __bool__(self) -> bool: return self.structural or self.aggregate
+
+def calc_tree_diff[NT, EK](lt: Tree[NT, EK], rt: Tree[NT, EK]) -> TreeDiff[NT, EK]:
   """Calculates the primitive difference between two (ordered) trees.
   
   A tree has topology (ie. structure) & semantics (ie. meaning). Therefore, "difference" is slightly nuanced:
@@ -156,8 +174,8 @@ def calc_semantic_diff[NT, EK](lt: Tree[NT, EK], rt: Tree[NT, EK], topo_diff: To
   )
   r_sv = frozenset(
     (n.location, n.fingerprint)
-    for n in rt.nodes
-    if n in topo_diff.nodes.common and n.value != STRUCTURAL
+    for n in _rn.values()
+    if n.location in topo_diff.nodes.common and n.value != STRUCTURAL
   )
   # Then calculate the diff using set theory
   sv_common = l_sv.intersection(r_sv)
