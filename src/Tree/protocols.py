@@ -22,15 +22,6 @@ class Node[T](Protocol):
   props: MutableMapping
   """Metadata Properties"""
 
-  def __str__(self):
-    s = f'Node[{self.location}]'
-    if not self.value is STRUCTURAL: s += f': {self.fingerprint}'
-    return s
-  def __hash__(self): return hash(self.location)
-  def __eq__(self, value):
-    if isinstance(value, Node): return (self.location, self.fingerprint) == (value.location, value.fingerprint)
-    else: return False
-
 class Edge[EK](Protocol):
   """Edges are Uniquely Identifable (Hashable) by their key, participant nodes & direction"""
   points: tuple[ID_T, ID_T]
@@ -42,17 +33,6 @@ class Edge[EK](Protocol):
   props: MutableMapping
   """Metadata Properties"""
   
-  def __str__(self) -> str:
-    s = f'Edge[{self.key}]: '
-    if self.direction is None: s += '<->'.join(self.points)
-    elif self.direction: s += '->'.join(self.points)
-    else: s += '<-'.join(self.points)
-    return s
-  def __hash__(self) -> int: return hash((self.key, *self.points, self.direction))
-  def __eq__(self, value):
-    if isinstance(value, Edge): return (self.key, *self.points, self.direction) == (value.key, *value.points, value.direction)
-    else: return False
-
 class Tree[NT, EK](Protocol):
   """An Ordered Tree parameterized by Node Type & Edge Key"""
 
@@ -66,58 +46,6 @@ class Tree[NT, EK](Protocol):
   """Metadata Properties"""
   fingerprint: HASH_T
   """The topologically contextualized semantic fingerprint of this (sub)tree"""
-
-  def __hash__(self):
-    # Hash based on Topology
-    return hash((
-      key, # The Topology to sequence
-      ( # The Ordered Sequence of Nodes for the Topology
-        ( node.location, node.fingerprint ) # Toplogically Contextualized Semantic Fingerprint
-        for node in map(
-          lambda loc: self.nodes[loc],
-          self.walk(key=key, mode='dfs:pre')
-        )
-      ),
-    ) for key in self.edges.keys())
-  def __eq__(self, value):
-    if not isinstance(value, type(self)): raise TypeError(f"can't compare a {type(value).__name__} to a {type(self).__name__}")
-    ### First check for mismatch in tree properties
-    le, re = self.edges, value.edges
-    lek, rek = frozenset(le.keys()), frozenset(re.keys())
-    if lek != rek: return False
-    ln, rn = self.nodes, value.nodes
-    l_locs, r_locs = frozenset(ln.keys()), frozenset(rn.keys())
-    if l_locs != r_locs: return False
-    l_heights, r_heights = tuple(self.height.items()), tuple(value.height.items())
-    if l_heights != r_heights: return False
-    ### Finally run a deep check of the trees looking for a mismatch in topologically contextualized semantics
-    # We walk the tree in order to avoid evaluating everything all at once.
-    def _compare(l_iter: Iterator[str], r_iter: Iterator[str]) -> bool:
-      for l_loc, r_loc in zip(l_iter, r_iter):
-        l, r = ln[l_loc], rn[r_loc]
-        if not (
-          l.location == r.location
-            and
-          l.fingerprint == r.fingerprint
-        ): return False
-      ### Invariants Start
-      try: next(l_iter)
-      except StopIteration: pass
-      else: assert False
-      try: next(r_iter)
-      except StopIteration: pass
-      else: assert False
-      ### Invariants Done
-      return True
-
-    for k in lek:
-      if not _compare(
-        iter(self.walk(key=k, mode='dfs:pre')),
-        iter(value.walk(key=k, mode='dfs:pre'))
-      ): return False
-
-    # No mismatch found
-    return True
 
   def add_edge_key(self, edge_key: EK):
     """Add a new key to the topology"""
