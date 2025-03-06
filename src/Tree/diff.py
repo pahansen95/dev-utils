@@ -63,7 +63,7 @@ class SemanticDiff:
   aggregate: Diff[HASH_T]
   """The difference of the entire set of semantics contained per tree ignoring topology"""
 
-  def __bool__(self) -> bool: return self.structural or self.aggregate
+  def __bool__(self) -> bool: return bool(self.structural) or bool(self.aggregate)
 
 def calc_tree_diff[NT, EK](lt: Tree[NT, EK], rt: Tree[NT, EK]) -> TreeDiff[NT, EK]:
   """Calculates the primitive difference between two (ordered) trees.
