@@ -29,17 +29,15 @@ class Diff[T]:
   """Uniqueness to the right tree"""
 
   def __bool__(self) -> bool: return bool(self.left) or bool(self.right)
-
-@dataclass
-class TreeDiff[EK]:
-  """The Diff between two trees"""
-
-  topology: TopologyDiff[EK]
-  """Topological Difference"""
-  semantics: SemanticDiff
-  """Semantic Difference"""
-
-  def __bool__(self) -> bool: return bool(self.topology) or bool(self.semantics)
+  def __str__(self) -> str:
+    lines = []
+    lines.append('common:')
+    lines.extend(f'  `{item}`' for item in self.common)
+    lines.append('left uniq:')
+    lines.extend(f'  `{item}`' for item in self.left)
+    lines.append('right uniq:')
+    lines.extend(f'  `{item}`' for item in self.right)
+    return '\n'.join(lines)
 
 @dataclass
 class TopologyDiff[EK]:
@@ -53,6 +51,16 @@ class TopologyDiff[EK]:
   """Diff in Edges, grouped by Edge Key"""
 
   def __bool__(self) -> bool: return bool(self.nodes) or bool(self.keys) or any(map(bool, self.edges.values()))
+  def __str__(self) -> str:
+    lines = []
+    lines.append('nodes:')
+    lines.extend(f'  {line}' for line in str(self.nodes).splitlines())
+    lines.append('edge keys:')
+    lines.extend(f'  {line}' for line in str(self.keys).splitlines())
+    for k, v in self.edges.items():
+      lines.append(f'{k} edges:')
+      lines.extend(f'  {line}' for line in str(v).splitlines())
+    return '\n'.join(lines)
 
 @dataclass
 class SemanticDiff:
@@ -64,6 +72,31 @@ class SemanticDiff:
   """The difference of the entire set of semantics contained per tree ignoring topology"""
 
   def __bool__(self) -> bool: return bool(self.structural) or bool(self.aggregate)
+  def __str__(self) -> str:
+    lines = []
+    lines.append('structural:')
+    lines.extend(f'  {line}' for line in str(self.structural).splitlines())
+    lines.append('aggregate:')
+    lines.extend(f'  {line}' for line in str(self.aggregate).splitlines())
+    return '\n'.join(lines)
+
+@dataclass
+class TreeDiff[EK]:
+  """The Diff between two trees"""
+
+  topology: TopologyDiff[EK]
+  """Topological Difference"""
+  semantics: SemanticDiff
+  """Semantic Difference"""
+
+  def __bool__(self) -> bool: return bool(self.topology) or bool(self.semantics)
+  def __str__(self) -> str:
+    lines = []
+    lines.append('topology:')
+    lines.extend(f'  {line}' for line in str(self.topology).splitlines())
+    lines.append('semantics:')
+    lines.extend(f'  {line}' for line in str(self.semantics).splitlines())
+    return '\n'.join(lines)
 
 def calc_tree_diff[NT, EK](lt: Tree[NT, EK], rt: Tree[NT, EK]) -> TreeDiff[NT, EK]:
   """Calculates the primitive difference between two (ordered) trees.
