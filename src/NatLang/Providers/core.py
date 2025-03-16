@@ -1,41 +1,17 @@
 from __future__ import annotations
-from types import TracebackType
-from typing import Any, Literal, TypedDict, Required, NotRequired, TypeVar, Generic, ContextManager, ParamSpec
-from collections.abc import Callable, Generator
+from ..core import *
 from dataclasses import dataclass, field, fields, KW_ONLY
-from functools import wraps
+from functools import wraps, cache
 
-import logging, time, json
+import logging, time, os
+
+from abc import ABC
 
 from ..Protocols import intern as p
+from ..core import ModelCapabilities, model_capabilities
+from .. import chat as c #, embed as e
 
 logger = logging.getLogger()
-
-class ModelCfg(p.ModelCfg, TypedDict, total=False):
-  version: Required[str]
-  """The fully qualified versioned name identifying this model in the Provider API"""
-  inputSize: Required[int]
-  """The total allowed token input"""
-  inputDType: str
-  """Expected datatype of the input"""
-  outputSize: Required[int]
-  """The maximum allowed token output"""
-  outputDType: str
-  """Expected datatype of the output"""
-
-@dataclass
-class Model(p.Model):
-  name: str
-  cfg: ModelCfg
-  props: dict[str, Any] = field(default_factory=dict)
-
-@dataclass
-class ModelProvider(p.ModelProvider):
-  models: dict[str, Model]
-  
-@dataclass
-class ProviderSession(p.ProviderSession):
-  provider: ModelProvider
 
 @dataclass
 class ProviderError(RuntimeError):
@@ -90,3 +66,16 @@ class Retry:
     return _retry_fn
 
 RETRY_T = type[Retry]
+
+NO_DEFAULT = type('NO_DEFAULT')
+def load_env(*keys: str, env: Mapping[str, str] = os.environ, default: str | None = NO_DEFAULT,) -> str:
+  v = NO_DEFAULT
+  for k in keys:
+    if k in env:
+      v = env[k]
+      break
+  else:
+    if default is NO_DEFAULT: raise KeyError(*keys)
+    v = default
+  return v
+    

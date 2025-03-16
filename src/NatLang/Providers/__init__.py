@@ -4,4 +4,4 @@ Model Providers
 
 """
 
-from . import OpenAI
+from .loader import *
