@@ -1,10 +1,11 @@
 
 from .intern import (
   ROLE, CONTENT, LATENT,
-  SeDer, Properties,
+  SeDer,
   Message, Embedding,
   Conversation, ChatLog,
   Chat, Embed,
   Model, ModelTuner,
   ModelProvider, ProviderSession,
+  ProviderLoader,
 )

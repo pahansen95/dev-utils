@@ -1,9 +1,5 @@
 
 from __future__ import annotations
-from typing import TypeVar, Generic, Any, TypedDict, NotRequired, Required
+from typing import TypeVar, Generic, Any, TypedDict, NotRequired, Required, Unpack, ContextManager, Literal, Protocol
 from types import *
 from collections.abc import *
-
-### SemanticType Meta
-class SemanticType:
-  def __init__(self): raise TypeError('SemanticType cannot be instantiated direcctly')

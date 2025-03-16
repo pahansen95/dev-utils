@@ -21,18 +21,47 @@ LATENT = TypeVar('LATENT', bound=ByteString|Sequence[int])
 
 ### Protocols describing state & ownership
 
-class Agent(Protocol):
+class Node(SemanticType, Generic[T]):
+  """A Node in a Graph. Represents an entity with a unique identity."""
+  val: T
+  id: Hashable
+  opts: MutableMapping[str, Any]
+  def __eq__(self, other: object) -> bool: ...
+  def __hash__(self) -> int: ...
+U = TypeVar('U')
+V = TypeVar('V')
+class Edge(SemanticType, Generic[K, U, V]):
+  """A Directed Edge in a Graph. Represents a relationship between two Nodes."""
+  k: K
+  u: Node[U]
+  v: Node[V]
+  opts: MutableMapping[str, Any]
+  def __eq__(self, other: object) -> bool: ...
+  def __hash__(self) -> int: ...
+N = TypeVar('N', bound=Node)
+E = TypeVar('E', bound=Edge)
+class Graph(SemanticType, Generic[N, E]):
+  """A Graph represents a set of related entities connected by directed edges."""
+  nodes: Set[N]
+  edges: Set[E]
+  def adjacency(self) -> Mapping[N, Iterator[N]]: ...
+
+  def add_nodes(self, *node: N): ...
+  def add_edges(self, *edge: E): ...
+  def get_roots(self) -> Sequence[N]: ...
+
+class Agent(SemanticType):
   """Some entity participating in a Conversation; for example a LLM or a user"""
   name: str
   props: MutableMapping[str, Any] | None
 
-class Message(Protocol):
+class Message(SemanticType):
   """A Single Message in a Conversation"""
   role: ROLE
   content: CONTENT
   props: MutableMapping[str, Any] | None
 
-class Embedding(Protocol):
+class Embedding(SemanticType):
   """A Batch of Latents; design based on a NumPy ndarray"""
   buffer: Sequence[LATENT]
   """The batch of Latents; usually a continuous buffer of memory"""
@@ -42,38 +71,33 @@ class Embedding(Protocol):
   """The Data Type of the buffer; ex. f32 or u8"""
   props: MutableMapping[str, Any] | None
 
-class Conversation(Protocol):
+C_N = TypeVar('C_N', bound=Node[Message])
+C_E = TypeVar('C_E', bound=Edge[Literal['prompt', 'reply'], Message, Message])
+class Conversation(Graph[C_N, C_E]):
   """A set of messages, forming causal relationships between each other"""
-  messages: set[Message]
-  """The total set of messages in the Conversation"""
-
-  def new_chat(self, msg: Message):
-    """Start a new chat log rooted at the passed message"""
-  def add_reply(self, msg: Message, to: Message):
-    """Add the message as a reply to the specified message"""
   def chat_logs(self) -> Iterator[ChatLog]:
     """A lazy loaded sequence of Chat Logs available in the conversation"""
 
-class ChatLog(Sequence[Message]):
+class ChatLog(SemanticType, Sequence[Message]):
   """A causally ordered sequence of messages in a conversation; ie. A single path in the conversational graph"""
 
 ### Protocols describing functionality
 
-class SeDer(Protocol, Generic[T]):
-  class Marshal(Protocol):
+class SeDer(SemanticType, Generic[T]):
+  class Marshal(SemanticType):
     def __call__(self, o: T) -> ByteString: ...
-  class Unmarshal(Protocol):
+  class Unmarshal(SemanticType):
     def __call__(self, b: ByteString) -> T: ...
 
-class Chat(Protocol):
+class Chat(SemanticType):
   """A Prompt-Reply turn contextualized to a chat log"""
   def __call__(self, model: str, *msg: Message) -> Message: ...
 
-class Embed(Protocol):
+class Embed(SemanticType):
   """A Process to encode semantics from textual to numerical formats"""
   def __call__(self, model: str, chunk: CONTENT) -> Embedding: ...
 
-class ModelCfg(Protocol):
+class ModelCfg(SemanticType):
   version: str
   """The fully qualified versioned name identifying this model in the Provider API"""
   inputSize: int
@@ -85,15 +109,15 @@ class ModelCfg(Protocol):
   outputDType: str | None
   """Expected datatype of the output"""
 
-class ModelCapabilities(Protocol):
+class ModelCapabilities(SemanticType):
   """Capabilties the Model Provides"""
   chat: bool
   embed: bool
 
-class ModelOpts(Protocol):
+class ModelOpts(SemanticType):
   """Runtime Tunable Options of the Model"""
 
-class Model(Protocol):
+class Model(SemanticType):
   """A Large Language Model"""
   name: str
   """Identifying Name of the Model"""
@@ -102,9 +126,7 @@ class Model(Protocol):
   opts: ModelOpts | None
   caps: ModelCapabilities
 
-AvailableModels = Mapping[str, Model]
-
-class ModelTuner(Protocol):
+class ModelTuner(SemanticType):
   """A Context manager to temporarily tune the runtime parameters of a Model"""
   model: Model
   props: MutableMapping[str, Any] | None
@@ -112,19 +134,12 @@ class ModelTuner(Protocol):
   def __enter__(self) -> Model: ...
   def __exit__(self, exc_type: type[Exception], exc_value: Exception, traceback: TracebackType): ...
 
-class ProviderAuth(Protocol):
-  """Authentication for a Provider Session"""
-
-class ProviderSession(Protocol):
+class ProviderSession(SemanticType):
   """An stateful session w/ a Model Provider"""
 
-class ProviderCfg(Protocol):
-  """Provider Platform Configurations"""
-
-class ModelProvider(Protocol):
+class ModelProvider(SemanticType):
   """A Provider of a Large Language Model"""
   models: dict[str, Model]
-  cfg: ProviderCfg
   session: ProviderSession
 
   ### Method Protocols
@@ -136,13 +151,6 @@ class ModelProvider(Protocol):
     """Applies tuning options to the model"""
   def supports(self, model: str, capability: str) -> bool:
     """Check if the model supports the provided capability"""
-
-class ProviderLoader(Protocol):
-  def load_provider(self, auth_env: Mapping[str, str], cfg_env: Mapping[str, str] | None, partial_cfg: Mapping[str, str] | None) -> ModelProvider: ...
-  def load_provider_models(self, cfg: ModelCfg) -> AvailableModels: ...
-  def load_provider_config(self, env: Mapping[str, str] | None, partial: Mapping[str, str] | None) -> ProviderCfg: ...
-  def load_provider_auth(self, env: Mapping[str, str]) -> ProviderAuth: ...
-  def load_provider_session(self, cfg: ProviderCfg, auth: ProviderAuth) -> ProviderSession: ...
 
 __all__ = [
   "Agent",
@@ -162,7 +170,6 @@ __all__ = [
   "ModelTuner",
   "Node",
   "MutableMapping[str, Any]",
-  "ProviderLoader",
   "ProviderSession",
   "ROLE",
   "SeDer",
