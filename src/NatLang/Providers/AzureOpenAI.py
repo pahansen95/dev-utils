@@ -28,7 +28,7 @@ class AzureOAIEndpoints:
   inference_api_version: str = '2025-02-01-preview'
 
 @dataclass
-class AzureOAICfg(OpenAICfg):
+class AzureOAICfg(p.ProviderCfg):
   url: str
   """The URL Endpoint to use"""
   _: KW_ONLY
@@ -64,13 +64,13 @@ class AzureOAI(OpenAI):
     _messages = list(map(_Message.transform, messages))
     try:
       resp = self.session.retry_request(
-        route=_chat_endpoint,
+        path=_chat_endpoint,
         body=( _model.opts | {
           'messages': _messages,
         } ),
-        params=[
-          ('api-version', _api_version),
-        ],
+        params={
+          'api-version': _api_version
+        },
       )
       logger.debug(f'POST {_chat_endpoint}?api-version={_api_version}\n{json.dumps(resp, indent=2)}')
       assert resp['kind'] == 'response'
@@ -106,10 +106,11 @@ def load_provider_config(
       'DEVAGENT_PROVIDER_AZUREOAI_CFG',
       'AZUREOAI_CFG',
     ), env=env, default='{}'))
+  logger.debug(f'{partial=}')
   MISSING = type('MISSING', (), {})
   def _pop(k, d = MISSING, o: dict = partial): return o.pop(k, d)
-  cfg = AzureOAICfg()
-  if (url := _pop('url')) is not MISSING: cfg.url = url
+  if (url := _pop('url')) is MISSING: raise ProviderError('AzureOpenAI Config requires the URL be configured')
+  cfg = AzureOAICfg(url)
   if (endpoints := _pop('endpoints')) is not MISSING:
     assert isinstance(endpoints, dict)
     logger.debug(f'{endpoints=}')
