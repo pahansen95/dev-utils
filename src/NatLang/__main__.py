@@ -25,7 +25,7 @@ def subcmd_prompt(
   """Simple CLI Interface to prompt a LLM; takes prompt text & writes the reply to stdout"""
 
   provider_name, model_name = model_slug.split(':')
-  provider = nl.load_provider_from_env(provider_name, env, provider_cfg or {})
+  provider = nl.load_provider_from_env(provider_name, env, provider_cfg)
   if not provider.supports(model_name, 'chat'): raise RuntimeError(f'Model {model_slug} does not support Chat')
   assert provider.chat is not None
   chat = provider.chat
