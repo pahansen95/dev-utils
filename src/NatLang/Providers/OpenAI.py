@@ -10,34 +10,15 @@ from typing import ContextManager, TypeVar, Generic
 from functools import wraps, update_wrapper
 import requests, contextlib, logging, base64
 from .core import *
+from .Backend.http import *
 
 logger = logging.getLogger(__name__)
-
-class ModelCfg(TypedDict):
-  version: Required[str]
-  """The fully qualified versioned name identifying this model in the Provider API"""
-  inputSize: Required[int]
-  """The total allowed token input"""
-  inputDType: str
-  """Expected datatype of the input"""
-  outputSize: Required[int]
-  """The maximum allowed token output"""
-  outputDType: str
-  """Expected datatype of the output"""
-
-@dataclass
-class Model(p.Model):
-  name: str
-  cfg: ModelCfg
-  _: KW_ONLY
-  caps: ModelCapabilities
-  opts: dict[str, Any] = field(default_factory=dict)
 
 CHAT_MODELS: dict[str, p.Model] = {}
 EMBED_MODELS: dict[str, p.Model] = {}
 
 @dataclass
-class GPT(Model):
+class GPT(ChatModel):
   name: Literal['gpt-4.5', 'gpt-4o', 'gpt-4o-mini', 'chatgpt']
   _: KW_ONLY
   caps: ModelCapabilities = field(init=False, default_factory=lambda: model_capabilities(chat=True))
@@ -78,7 +59,7 @@ CHAT_MODELS |= { m.name: m for m in (
 ) }
 
 @dataclass
-class Reasoning(Model):
+class Reasoning(ChatModel):
   name: Literal['o1', 'o1-mini', 'o3-mini']
   _: KW_ONLY
   caps: ModelCapabilities = field(init=False, default_factory=lambda: model_capabilities(chat=True))
@@ -120,7 +101,7 @@ CHAT_MODELS |= { m.name: m for m in (
 ) }
 
 @dataclass
-class TextEmbedding(Model):
+class TextEmbedding(EmbedModel):
   name: Literal['text-embedding-3-large', 'text-embedding-3-small']
   _: KW_ONLY
   caps: ModelCapabilities = field(init=False, default_factory=lambda: model_capabilities(embed=True))
@@ -146,8 +127,6 @@ EMBED_MODELS |= {
   ),
 }
 
-def load_provider_models(cfg: Model) -> dict[str, GPT | Reasoning | TextEmbedding]:
-  return CHAT_MODELS | EMBED_MODELS
 
 class _Message(TypedDict):
   role: str
@@ -194,34 +173,12 @@ class OpenAICfg(p.ProviderCfg):
   url: str = 'https://api.openai.com/v1'
   endpoints: OpenAIEndpoints = field(default_factory=OpenAIEndpoints)
 
-def load_provider_config(
-  env: dict[str, str] | None,
-  partial: dict[str, str] | None,
-) -> OpenAICfg:
-  if env is None and partial is None: raise ValueError("Must provide at least one of env or partial")
-  if partial is None: partial = json.loads(load_env(*(
-      'DEVAGENT_PROVIDER_OPENAI_CFG',
-      'OPENAI_CFG',
-    ), env=env, default='{}'))
-  MISSING = type('MISSING', (), {})
-  def _pop(k, d = MISSING, o: dict = partial): return o.pop(k, d)
-  cfg = OpenAICfg()
-  if (url := _pop('url')) is not MISSING: cfg.url = url
-  if (endpoints := _pop('endpoints')) is not MISSING:
-    assert isinstance(endpoints, dict)
-    logger.debug(f'{endpoints=}')
-    if (chat_endpoint := _pop('chat', o=endpoints)): cfg.endpoints.chat = chat_endpoint
-    if (embed_endpoint := _pop('embed', o=endpoints)): cfg.endpoints.embed = embed_endpoint
-  return cfg
-
-@dataclass
+@dataclass(frozen=True)
 class OpenAIAuth(p.ProviderAuth):
   token: str
   _: KW_ONLY
   organization: str | None = None
   project: str | None = None
-
-  def __hash__(self): return hash((self.token, self.organization, self.project))
 
   @cache
   def to_http_headers(self) -> dict[str, str]:
@@ -229,88 +186,16 @@ class OpenAIAuth(p.ProviderAuth):
     if self.organization is not None: auth_headers['OpenAI-Organization'] = self.organization
     if self.project is not None: auth_headers['OpenAI-Project'] = self.project
     return auth_headers
-  
-def load_provider_auth(env: dict[str, str]) -> OpenAIAuth:
-  """Loads the API Token from the passed env"""
-  token = load_env(*(
-    'DEVAGENT_PROVIDER_OPENAI_TOKEN',
-    'OPENAI_TOKEN',
-  ), env=env)
-  org = load_env(*(
-    'DEVAGENT_PROVIDER_OPENAI_ORG',
-    'OPENAI_ORG',
-  ), env=env, default=None)
-  project = load_env(*(
-    'DEVAGENT_PROVIDER_OPENAI_PROJECT',
-    'OPENAI_PROJECT',
-  ), env=env, default=None)
-  return OpenAIAuth(token=token, organization=org, project=project)
-
-REQ_RESP_T = tuple[
-  tuple[int, int],
-  requests.Response,
-]
 
 @dataclass
-class OpenAIRestAPI(p.ProviderSession):
-  url: str
-  auth: OpenAIAuth
+class OpenAISession(p.ProviderSession, HTTPBackend):
+  """An API Session w/ the OpenAI HTTP based API"""
   _: KW_ONLY
-  session: requests.Session = field(default_factory=requests.session)
-  headers: dict[str, str] = field(default_factory=dict)
-
-  @contextlib.contextmanager
-  def json_request(self,
-    route: str,
-    body: dict,
-    headers: dict = {},
-    params: dict | list[tuple] = None,
-    method = 'POST',
-  ) -> Generator[REQ_RESP_T, None, None]:
-    url = self.url.rstrip('/')
-    route = route.lstrip('/')
-    headers = self.headers | self.auth.to_http_headers() | headers
-    with self.session.request(
-      method, f'{url}/{route}',
-      headers=headers,
-      params=params,
-      json=body,
-    ) as resp:
-      yield (
-        divmod(resp.status_code, 100),
-        resp,
-      )
-  
-  @Retry()
-  def retry_json_request(self,
-    route: str,
-    body: dict,
-    headers: dict = {},
-    params: dict | list[tuple] = None,
-    method = 'POST',
-  ) -> dict:
-    with self.json_request(route, body, headers=headers, params=params, method=method) as (
-      (major, minor),
-      resp,
-    ):
-      if major in { 5 }: return Retry
-      elif major in { 4 }: raise ProviderError( obj=( { 'kind': 'error' } | resp.json() ) )
-      assert major in { 2 }
-      return { 'kind': 'response' } | resp.json()
-
-def load_provider_session(
-  cfg: OpenAICfg,
-  auth: OpenAIAuth,
-) -> OpenAIRestAPI:
-  return OpenAIRestAPI(
-    url=cfg.url,
-    auth=auth,
-  )
 
 @dataclass
-class OpenAI(p.ModelProvider):
+class OpenAI(BaseModelProvider):
   models: dict[str, GPT | Reasoning | TextEmbedding]
-  session: OpenAIRestAPI
+  session: OpenAISession
   cfg: OpenAICfg
 
   def chat(self, model: str, *messages: c.ChatMessage) -> c.ChatMessage:
@@ -321,16 +206,15 @@ class OpenAI(p.ModelProvider):
     else: raise TypeError(type(_model))
     _messages = list(map(_Message.transform, messages))
     try:
-      resp = self.session.retry_json_request(
-        route=f"/{_chat_endpoint.lstrip('/')}",
+      resp = self.session.retry_request(
+        path=_chat_endpoint,
         body=( _model.opts | {
           'model': _model.cfg['version'],
           'messages': _messages,
         } ),
       )
-      logger.debug(f'POST {_chat_endpoint}\n{json.dumps(resp, indent=2)}')
       assert resp['kind'] == 'response'
-    except ProviderError as e:
+    except ProviderHTTPBackendError as e:
       assert e.obj['kind'] == 'error'
       err_msg = f'OpenAI Provider Error: {e}'
       logger.debug(err_msg)
@@ -347,7 +231,7 @@ class OpenAI(p.ModelProvider):
     _embed_endpoint = self.cfg.endpoints.embed
     assert isinstance(model, TextEmbedding)
     try:
-      resp = self.session.retry_json_request(
+      resp = self.session.retry_request(
         route=f"/{_embed_endpoint.lstrip('/')}",
         body=( _model.opts | {
           'model': _model.cfg['version'],
@@ -378,6 +262,56 @@ class OpenAI(p.ModelProvider):
       self.models[model].opts = old_opts
     
   def supports(self, model: str, capability: str) -> bool: return self.models[model].caps[capability]
+
+### Model Loader Interface
+
+def load_provider_models(cfg: ChatModel) -> dict[str, GPT | Reasoning | TextEmbedding]:
+  return CHAT_MODELS | EMBED_MODELS
+
+def load_provider_config(
+  env: dict[str, str] | None,
+  partial: dict[str, str] | None,
+) -> OpenAICfg:
+  if env is None and partial is None: raise ValueError("Must provide at least one of env or partial")
+  if partial is None: partial = json.loads(load_env(*(
+      'DEVAGENT_PROVIDER_OPENAI_CFG',
+      'OPENAI_CFG',
+    ), env=env, default='{}'))
+  MISSING = type('MISSING', (), {})
+  def _pop(k, d = MISSING, o: dict = partial): return o.pop(k, d)
+  cfg = OpenAICfg()
+  if (url := _pop('url')) is not MISSING: cfg.url = url
+  if (endpoints := _pop('endpoints')) is not MISSING:
+    assert isinstance(endpoints, dict)
+    logger.debug(f'{endpoints=}')
+    if (chat_endpoint := _pop('chat', o=endpoints)): cfg.endpoints.chat = chat_endpoint
+    if (embed_endpoint := _pop('embed', o=endpoints)): cfg.endpoints.embed = embed_endpoint
+  return cfg
+
+def load_provider_auth(env: dict[str, str]) -> OpenAIAuth:
+  """Loads the API Token from the passed env"""
+  token = load_env(*(
+    'DEVAGENT_PROVIDER_OPENAI_TOKEN',
+    'OPENAI_TOKEN',
+  ), env=env)
+  org = load_env(*(
+    'DEVAGENT_PROVIDER_OPENAI_ORG',
+    'OPENAI_ORG',
+  ), env=env, default=None)
+  project = load_env(*(
+    'DEVAGENT_PROVIDER_OPENAI_PROJECT',
+    'OPENAI_PROJECT',
+  ), env=env, default=None)
+  return OpenAIAuth(token=token, organization=org, project=project)
+
+def load_provider_session(
+  cfg: OpenAICfg,
+  auth: OpenAIAuth,
+) -> OpenAISession:
+  return OpenAISession(
+    url=cfg.url,
+    auth_headers=auth.to_http_headers,
+  )
 
 def load_provider(
   auth_env: Mapping[str, str],

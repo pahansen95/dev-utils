@@ -19,9 +19,6 @@ EMBED_MODELS = { k: v for k, v in _AZUREOAI_EMBED_MODELS.items() if k not in {
   '', # TODO:
 } }
 
-def load_provider_models(cfg: Model) -> dict[str, GPT | Reasoning | TextEmbedding]:
-  return CHAT_MODELS | EMBED_MODELS
-
 @dataclass
 class AzureOAIEndpoints:
   _: KW_ONLY
@@ -37,25 +34,6 @@ class AzureOAICfg(OpenAICfg):
   _: KW_ONLY
   endpoints: AzureOAIEndpoints = field(default_factory=AzureOAIEndpoints)
 
-def load_provider_config(
-  env: dict[str, str] | None,
-  partial: dict[str, str] | None,
-) -> AzureOAICfg:
-  if env is None and partial is None: raise ValueError("Must provide at least one of env or partial")
-  if partial is None: partial = json.loads(load_env(*(
-      'DEVAGENT_PROVIDER_AZUREOAI_CFG',
-      'AZUREOAI_CFG',
-    ), env=env, default='{}'))
-  MISSING = type('MISSING', (), {})
-  def _pop(k, d = MISSING, o: dict = partial): return o.pop(k, d)
-  cfg = AzureOAICfg()
-  if (url := _pop('url')) is not MISSING: cfg.url = url
-  if (endpoints := _pop('endpoints')) is not MISSING:
-    assert isinstance(endpoints, dict)
-    logger.debug(f'{endpoints=}')
-    if (chat_endpoint := _pop('chat', o=endpoints)): cfg.endpoints.chat = chat_endpoint
-    if (embed_endpoint := _pop('embed', o=endpoints)): cfg.endpoints.embed = embed_endpoint
-  return cfg
 
 @dataclass
 class AzureOAIAuth(p.ProviderAuth):
@@ -67,32 +45,13 @@ class AzureOAIAuth(p.ProviderAuth):
   def to_http_headers(self) -> dict[str, str]:
     return { 'api-key': self.token }
 
-def load_provider_auth(env: dict[str, str]) -> AzureOAIAuth:
-  """Loads the API Token from the passed env"""
-  token = load_env(*(
-    'DEVAGENT_PROVIDER_AZUREOAI_TOKEN',
-    'AZUREOAI_TOKEN',
-  ), env=env)
-  return AzureOAIAuth(token=token)
-
-def auth_to_headers(*auth) -> dict[Literal['api-key'], str]: return { auth[0]: auth[1] }
-
 @dataclass
-class AzureOAIRestAPI(OpenAIRestAPI): ...
-
-def load_provider_session(
-  cfg: AzureOAICfg,
-  auth: AzureOAIAuth,
-) -> AzureOAIRestAPI:
-  return AzureOAIRestAPI(
-    url=cfg.url,
-    auth=auth,
-  )
+class AzureOAISession(OpenAISession): ...
 
 @dataclass
 class AzureOAI(OpenAI):
   models: dict[str, GPT | Reasoning | TextEmbedding]
-  session: AzureOAIRestAPI
+  session: AzureOAISession
   cfg: AzureOAICfg
 
   def chat(self, model: str, *messages: c.ChatMessage) -> c.ChatMessage:
@@ -104,7 +63,7 @@ class AzureOAI(OpenAI):
     else: raise TypeError(type(_model))
     _messages = list(map(_Message.transform, messages))
     try:
-      resp = self.session.retry_json_request(
+      resp = self.session.retry_request(
         route=_chat_endpoint,
         body=( _model.opts | {
           'messages': _messages,
@@ -129,6 +88,46 @@ class AzureOAI(OpenAI):
 
   def embed(self, model: str, *content: p.CONTENT) -> p.Embedding:
     raise NotImplementedError
+
+def load_provider_auth(env: dict[str, str]) -> AzureOAIAuth:
+  """Loads the API Token from the passed env"""
+  token = load_env(*(
+    'DEVAGENT_PROVIDER_AZUREOAI_TOKEN',
+    'AZUREOAI_TOKEN',
+  ), env=env)
+  return AzureOAIAuth(token=token)
+
+def load_provider_config(
+  env: dict[str, str] | None,
+  partial: dict[str, str] | None,
+) -> AzureOAICfg:
+  if env is None and partial is None: raise ValueError("Must provide at least one of env or partial")
+  if partial is None: partial = json.loads(load_env(*(
+      'DEVAGENT_PROVIDER_AZUREOAI_CFG',
+      'AZUREOAI_CFG',
+    ), env=env, default='{}'))
+  MISSING = type('MISSING', (), {})
+  def _pop(k, d = MISSING, o: dict = partial): return o.pop(k, d)
+  cfg = AzureOAICfg()
+  if (url := _pop('url')) is not MISSING: cfg.url = url
+  if (endpoints := _pop('endpoints')) is not MISSING:
+    assert isinstance(endpoints, dict)
+    logger.debug(f'{endpoints=}')
+    if (chat_endpoint := _pop('chat', o=endpoints)): cfg.endpoints.chat = chat_endpoint
+    if (embed_endpoint := _pop('embed', o=endpoints)): cfg.endpoints.embed = embed_endpoint
+  return cfg
+
+def load_provider_models(cfg: ChatModel) -> dict[str, GPT | Reasoning | TextEmbedding]:
+  return CHAT_MODELS | EMBED_MODELS
+
+def load_provider_session(
+  cfg: AzureOAICfg,
+  auth: AzureOAIAuth,
+) -> AzureOAISession:
+  return AzureOAISession(
+    url=cfg.url,
+    auth_headers=auth.to_http_headers,
+  )
 
 def load_provider(
   auth_env: Mapping[str, str],
