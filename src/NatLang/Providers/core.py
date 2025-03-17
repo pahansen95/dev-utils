@@ -2,6 +2,7 @@ from __future__ import annotations
 from ..core import *
 from dataclasses import dataclass, field, fields, KW_ONLY
 from functools import wraps, cache
+from contextlib import contextmanager
 
 import logging, time, os
 
@@ -79,3 +80,47 @@ def load_env(*keys: str, env: Mapping[str, str] = os.environ, default: str | Non
     v = default
   return v
     
+
+@dataclass
+class BaseModelProvider(p.ModelProvider):
+
+  @contextmanager
+  def tune(self, model: str, **opts) -> Generator[None, None, None]:
+    """Temporarily Applies tuning options to the model"""
+    old_opts = self.models[model].opts
+    try:
+      self.models[model].opts |= opts
+      yield
+    finally:
+      self.models[model].opts = old_opts
+    
+  def supports(self, model: str, capability: str) -> bool: return self.models[model].caps[capability]
+
+# p.ModelCfg
+class ModelCfg(TypedDict, total=False):
+  version: Required[str]
+  """The fully qualified versioned name identifying this model in the Provider API"""
+  inputSize: Required[int]
+  """The total allowed token input"""
+  inputDType: str
+  """Expected datatype of the input"""
+  outputSize: Required[int]
+  """The maximum allowed token output"""
+  outputDType: str
+  """Expected datatype of the output"""
+
+@dataclass
+class ChatModel(p.Model):
+  name: str
+  cfg: ModelCfg
+  _: KW_ONLY
+  opts: dict[str, Any] = field(default_factory=dict)
+  caps: ModelCapabilities = field(init=False, default_factory=lambda: model_capabilities(chat=True))
+
+@dataclass
+class EmbedModel(p.Model):
+  name: str
+  cfg: ModelCfg
+  _: KW_ONLY
+  opts: dict[str, Any] = field(default_factory=dict)
+  caps: ModelCapabilities = field(init=False, default_factory=lambda: model_capabilities(embed=True))

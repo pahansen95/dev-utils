@@ -67,7 +67,7 @@ class SeDer(Protocol, Generic[T]):
 
 class Chat(Protocol):
   """A Prompt-Reply turn contextualized to a chat log"""
-  def __call__(self, model: str, *msg: Message) -> Message: ...
+  def __call__(self, model: str, *messages: Message) -> Message: ...
 
 class Embed(Protocol):
   """A Process to encode semantics from textual to numerical formats"""
