@@ -184,7 +184,7 @@ class OrderedMultiTree[NT](proto.Tree[NT, str]):
     **props,
   ):
     ### Add the Edge
-    if not isinstance(direction, bool) and direction: raise ValueError(f'Trees only support U -> V Edges')
+    if not (isinstance(direction, bool) and direction): raise ValueError(f'Trees only support U -> V Edges')
     if key not in self._edges.keys(): raise ValueError(f'Edge Key does not exist: `{key}`')
     if not all(n in self._nodes for n in vertices): raise ValueError(f'Undefined Node in `{vertices}`')
     edge = TreeEdge(points=vertices, key=key, props=props)
@@ -217,7 +217,8 @@ class OrderedMultiTree[NT](proto.Tree[NT, str]):
       if depth > 1_000_000: raise RuntimeError('Cycle Detected; depth exceeds 1,000,000') # TODO: Proper Cycle Detection
 
   def depth_of(self, loc: str, key: str = None) -> int:
-    return len(list(self.ancestors_of(loc, key))) - 1 # Don't include the Implicit Root in the count
+    if loc == self._root_loc: return -1
+    else: return len(list(self.ancestors_of(loc, key))) # Doesn't include the implicit root
 
   def parent_of(self, loc: str, key: str = None) -> str:
     if loc not in self._nodes: raise ValueError(f'Uknown Node: {loc}')
@@ -282,7 +283,7 @@ class OrderedMultiTree[NT](proto.Tree[NT, str]):
     if depth[0] < 0 or depth[1] > height: raise ValueError(f'Depth out of bounds; expected range 0 <= h <= {height}; got {depth[0]} <= h <= {depth[1]}')
     if root == self._root_loc: root_depth = 0 # Override the Implicit Root
     else: root_depth = self.depth_of(root, key)
-    if root_depth < depth[0] or root_depth > depth[1]: raise ValueError(f'Root depth out of bounds; expected range 0 <= h <= {height}; got root_depth')
+    if root_depth < depth[0] or root_depth > depth[1]: raise ValueError(f'Root depth out of bounds; expected range 0 <= h <= {height}; got {root_depth}')
     
     # TODO: Breakout into individual functions
     if mode == 'dfs:pre':
