@@ -37,6 +37,58 @@ The Grammar of EBNF+ written in EBNF+; EBNF+ is a derivative of EBNF.
         baz
 
 */
+
+<TERMINAL>
+// Visually Structural Tokens
+
+EMPTY_LINE = /^\s+$/
+'''A Line with only whitespace'''
+WHITESPACE = /[ \t\r\f\b]+/
+NEWLINE = "\n"
+COMMENT = /(#|\/\/)[^\n]*/
+MULTILINE_COMMENT = /\/\*[\s\S]*?\*\//
+
+// Special Tokens; Reserved Symbols & Words
+
+TERMINAL_START = /<\s*TERMINAL\s*>/
+TERMINAL_STOP = /<\s*\/TERMINAL\s*>/
+RULE_START = /<\s*RULE\s*>/
+RULE_STOP = /<\s*\/RULE\s*>/
+COMMA = ","
+EQUALS = "="
+COLON = ":"
+PIPE = "|"
+OPEN_PAREN = "("
+CLOSE_PAREN = ")"
+OPEN_SBRACKET = "["
+CLOSE_SBRACKET = "]"
+OPEN_BRACE = "{"
+CLOSE_BRACE = "}"
+STAR = "*"
+PLUS = "+"
+MINUS = "-"
+QMARK = "?"
+ELLIPSIS = "..."
+NOT_IMPLEMENTED = "TODO"
+'''A Placeholder for incomplete grammars'''
+
+// Semantic Tokens
+
+INTEGER = /[0-9]+/
+'''A Whole Number'''
+REGEX = /\/(?!<\s*\/)(?:[^\/\\]|\\.)+\/[a-zA-Z]*/
+'''A Regular Expression taking the form /pattern/ or /pattern/flags/'''
+MULTILINE_STRING = /['"]{3}(?:[^"\\]|"(?!"")|\\"|\\.)*['"]{3}/
+'''A string that allows newlines, starting and ending with three instances of the same quote character'''
+STRING = /(['"])(?:\\.|(?!\1)[^\n])*?\1/
+'''A sequence of characters (excluding unescaped newlines) quoted by matching quote characters, handling escaped characters'''
+LITERAL = /[^\s:=|(){}\[\]*.+?-,]+/
+'''An unquoted sequence of characters not containing any reserved symbols'''
+ESCAPED_LITERAL = /`[^`]+`/
+'''Everything between backticks is treated as a literal value'''
+
+</TERMINAL>
+
 <RULE>
 
 grammar = ( terminal_section | rule_section ) | ( rule_section | terminal_section )
@@ -104,55 +156,3 @@ lexeme = LITERAL | ESCAPED_LITERAL
 '''Some value representing a terminal in the described grammar'''
 
 </RULE>
-
-<TERMINAL>
-// Visually Structural Tokens
-
-EMPTY_LINE = /^\s+$/
-'''A Line with only whitespace'''
-WHITESPACE = /[ \t\r\f\b]+/
-NEWLINE = "\n"
-COMMENT = /(#|\/\/)[^\n]*/
-MULTILINE_COMMENT = /\/\*[\s\S]*?\*\//
-
-// Special Tokens; Reserved Symbols & Words
-
-TERMINAL_START = /<\s*TERMINAL\s*>/
-TERMINAL_STOP = /<\s*\/TERMINAL\s*>/
-RULE_START = /<\s*RULE\s*>/
-RULE_STOP = /<\s*\/RULE\s*>/
-COMMA = ","
-EQUALS = "="
-COLON = ":"
-PIPE = "|"
-OPEN_PAREN = "("
-CLOSE_PAREN = ")"
-OPEN_SBRACKET = "["
-CLOSE_SBRACKET = "]"
-OPEN_BRACE = "{"
-CLOSE_BRACE = "}"
-STAR = "*"
-PLUS = "+"
-MINUS = "-"
-QMARK = "?"
-ELLIPSIS = "..."
-NOT_IMPLEMENTED = "TODO"
-'''A Placeholder for incomplete grammars'''
-
-// Semantic Tokens
-
-INTEGER = /[0-9]+/
-'''A Whole Number'''
-REGEX = /\/(?!<\s*\/)(?:[^\/\\]|\\.)+\/[a-zA-Z]*/
-'''A Regular Expression taking the form /pattern/ or /pattern/flags/'''
-MULTILINE_STRING = /(['"]){3}(?:[^"\\]|"(?!"")|\\"|\\.)*\1{3}/
-'''A string that allows newlines, starting and ending with three instances of the same quote character'''
-STRING = /(['"])(?:\\.|(?!\1)[^\n])*?\1/
-'''A sequence of characters (excluding unescaped newlines) quoted by matching quote characters, handling escaped characters'''
-LITERAL = /[^\s:=|(){}\[\]*.+?-,]+/
-'''An unquoted sequence of characters not containing any reserved symbols'''
-ESCAPED_LITERAL = /`[^`]+`/
-'''Everything between backticks is treated as a literal value'''
-
-
-</TERMINAL>

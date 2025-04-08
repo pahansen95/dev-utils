@@ -10,7 +10,8 @@ from collections.abc import *
 from types import *
 from collections import deque
 from dataclasses import dataclass, field, KW_ONLY
-from NetCfg.Lex import BNF
+
+import BNF
 
 SCRIPT = pathlib.Path(__file__)
 CONTEXT = SCRIPT.parent # The context of Script
