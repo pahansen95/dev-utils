@@ -1,0 +1,158 @@
+/*
+
+The Grammar of EBNF+ written in EBNF+; EBNF+ is a derivative of EBNF.
+
+- Formatting
+  - Simplified & streamlined the grammar.
+    - concatenation is implicit
+  - Whitespace is visually structural.
+  - Allow for more expressive comments & embedding of documentation as Multiline strings
+- Sections
+  - Used to distinguish between Grammatical Lexemes & Syntactical Structure
+  - Must include a single TERMINAL & RULE Section
+- Terminals
+  - defined as literal strings or regular expressions
+  - defined as `...` to allow for external (programatic) definition 
+  - tokenization priority determined by A) longest match & then B) order as defined.
+- Rules
+  - Pre-Parsing:
+    - All structural tokens are ignored (ie. whitespace, comments)
+  - Simple Terminals (string literals) can be referenced by their value instead of by name
+    (ie. : instead of COLON )
+  - Symbols reserved by EBNF+ can be used inline by escaping or backtick quoting
+    (ie. `...` )
+  - Rules can be inline or expanded
+    
+    inline example:
+
+      foobar: baz
+      ''' docs '''
+
+    expanded example:
+
+      foobar:
+        '''
+        docs
+        '''
+        baz
+
+*/
+<RULE>
+
+grammar = ( terminal_section | rule_section ) | ( rule_section | terminal_section )
+'''The unsorted sequence of sections'''
+
+terminal_section = TERMINAL_START terminal_definition+ TERMINAL_STOP
+'''A section of terminal definitions'''
+
+terminal_definition:
+  '''
+  Defining some Grammatical Lexeme; either in inline or expanded form.
+  
+  Can only be declared in the TERMINAL Section
+  '''
+  (
+    LITERAL `:`
+    MULTILINE_STRING?
+    (STRING | REGEX | `...`)
+  ) | (
+    LITERAL `=` (STRING | REGEX | `...`)
+    MULTILINE_STRING?
+  )
+
+rule_section = RULE_START rule_definition+ RULE_STOP
+'''A Section of rule definitions'''
+
+rule_definition:
+  '''
+  Defining some Grammatical Rule; either in inline or expanded form.
+
+  Can only be declared in the RULE Section
+  '''
+  (
+    LITERAL `:`
+    MULTILINE_STRING?
+    (statement | `...`)
+  ) | (
+    LITERAL `=` (statement | `...`)
+    MULTILINE_STRING?
+  )
+
+// Core Syntax Structures
+
+grouping = `(` statement `)`
+'''Establish hierarchical scoping between statements'''
+
+statement:
+  '''A high-level syntactic construct that can handle either many clauses or alternatives'''
+  clause+ | # A Concatenation of Clauses
+  clause (`|` clause)+ # An Alternation of Clauses
+
+clause:
+  '''A collection of phrases'''
+  phrase+ | # A Concatenation of Phrases
+  ( phrase `-` phrase ) # A Phrase Exclusion
+
+range = `{` INTEGER `}` | `{` INTEGER? `,` INTEGER? `}`
+'''example: range = foobar{1} | foobar{,10} | foobar{1,} | foobar{1,10} | foobar{,} '''
+
+phrase:
+  '''An atomic syntactical construct'''
+  (lexeme+ | grouping) ( range | `?` | `*` | `+` )?
+  
+lexeme = LITERAL | ESCAPED_LITERAL
+'''Some value representing a terminal in the described grammar'''
+
+</RULE>
+
+<TERMINAL>
+// Visually Structural Tokens
+
+EMPTY_LINE = /^\s+$/
+'''A Line with only whitespace'''
+WHITESPACE = /[ \t\r\f\b]+/
+NEWLINE = "\n"
+COMMENT = /(#|\/\/)[^\n]*/
+MULTILINE_COMMENT = /\/\*[\s\S]*?\*\//
+
+// Special Tokens; Reserved Symbols & Words
+
+TERMINAL_START = /<\s*TERMINAL\s*>/
+TERMINAL_STOP = /<\s*\/TERMINAL\s*>/
+RULE_START = /<\s*RULE\s*>/
+RULE_STOP = /<\s*\/RULE\s*>/
+COMMA = ","
+EQUALS = "="
+COLON = ":"
+PIPE = "|"
+OPEN_PAREN = "("
+CLOSE_PAREN = ")"
+OPEN_SBRACKET = "["
+CLOSE_SBRACKET = "]"
+OPEN_BRACE = "{"
+CLOSE_BRACE = "}"
+STAR = "*"
+PLUS = "+"
+MINUS = "-"
+QMARK = "?"
+ELLIPSIS = "..."
+NOT_IMPLEMENTED = "TODO"
+'''A Placeholder for incomplete grammars'''
+
+// Semantic Tokens
+
+INTEGER = /[0-9]+/
+'''A Whole Number'''
+REGEX = /\/(?!<\s*\/)(?:[^\/\\]|\\.)+\/[a-zA-Z]*/
+'''A Regular Expression taking the form /pattern/ or /pattern/flags/'''
+MULTILINE_STRING = /(['"]){3}(?:[^"\\]|"(?!"")|\\"|\\.)*\1{3}/
+'''A string that allows newlines, starting and ending with three instances of the same quote character'''
+STRING = /(['"])(?:\\.|(?!\1)[^\n])*?\1/
+'''A sequence of characters (excluding unescaped newlines) quoted by matching quote characters, handling escaped characters'''
+LITERAL = /[^\s:=|(){}\[\]*.+?-,]+/
+'''An unquoted sequence of characters not containing any reserved symbols'''
+ESCAPED_LITERAL = /`[^`]+`/
+'''Everything between backticks is treated as a literal value'''
+
+
+</TERMINAL>
