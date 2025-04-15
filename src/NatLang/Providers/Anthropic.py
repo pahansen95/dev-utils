@@ -68,7 +68,7 @@ class Message(TypedDict):
   @staticmethod
   def transform(msg: c.ChatMessage) -> Message:
     _msg: Message = { 'content': msg['content'] }
-    if msg['role'] in { c.Role.PLATFORM, c.Role.DEVELOPER }: raise ValueError('Anthropic Provider does not support system messages')
+    if msg['role'] in { c.Role.PLATFORM, c.Role.DEVELOPER }: raise ProviderError('Anthropic Provider does not support system messages')
     elif msg['role'] in { c.Role.USER, }: _msg['role'] = 'user'
     elif msg['role'] in { c.Role.AGENT, c.Role.OTHER }: _msg['role'] = 'assistant'
     else: raise NotImplementedError(c.Role.name)
@@ -96,8 +96,6 @@ class AnthropicAuth(p.ProviderAuth):
 
   @cache
   def to_http_headers(self) -> dict: return { self.key: self.token }
-
-RESP_T = tuple[tuple[int, int], requests.Response]
 
 @dataclass
 class AnthropicSession(p.ProviderSession, HTTPBackend):
