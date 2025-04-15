@@ -19,11 +19,35 @@ EMBED_MODELS: dict[str, p.Model] = {}
 
 @dataclass
 class GPT(ChatModel):
-  name: Literal['gpt-4.5', 'gpt-4o', 'gpt-4o-mini', 'chatgpt']
+  name: Literal['gpt-4.5', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4o', 'gpt-4o-mini', 'chatgpt']
   _: KW_ONLY
   caps: ModelCapabilities = field(init=False, default_factory=lambda: model_capabilities(chat=True))
 
 CHAT_MODELS |= { m.name: m for m in (
+  GPT(
+    'gpt-4.1',
+    {
+      'version': 'gpt-4.1-2025-04-14',
+      'inputSize': 1_047_576,
+      'outputSize': 32_768,
+    }
+  ),
+  GPT(
+    'gpt-4.1-mini',
+    {
+      'version': 'gpt-4.1-mini-2025-04-14',
+      'inputSize': 1_047_576,
+      'outputSize': 32_768,
+    }
+  ),
+  GPT(
+    'gpt-4.1-nano',
+    {
+      'version': 'gpt-4.1-nano-2025-04-14',
+      'inputSize': 1_047_576,
+      'outputSize': 32_768,
+    }
+  ),
   GPT(
     'gpt-4.5',
     {
