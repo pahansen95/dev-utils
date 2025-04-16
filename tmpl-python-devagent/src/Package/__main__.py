@@ -3,9 +3,12 @@
 The Package Entrypoint
 
 """
+from __future__ import annotations
+from typing import *
+from collections.abc import *
+from types import *
 
 import logging, os, sys, contextlib, pathlib
-from typing import TextIO
 from collections import deque
 
 SCRIPT = pathlib.Path(__file__)
@@ -17,6 +20,7 @@ def main(
   kwargs: dict[str, str],
   remainder: deque[str],
   env: dict[str, str],
+  stdin: TextIO,
   stdout: TextIO,
 ) -> bool:
 
@@ -48,6 +52,7 @@ def main(
     else: raise E(f'Unknown Subcommand: {subcmd}')
 
   except E as e:
+    logger.info('CLI Error', exc_info=True)
     logger.critical(str(e))
     return False
   return True
@@ -103,6 +108,7 @@ if __name__ == "__main__":
     if _ok: RC = 0 if main(
       *CLI.parse_argv(sys.argv[1:]),
       dict(os.environ),
+      sys.stdin,
       sys.stdout,
     ) else 1
   exit(RC)

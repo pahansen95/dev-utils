@@ -1,6 +1,6 @@
 """
 
-The Package
+The Utilities Package
 
 """
 ### Specify what names to export
