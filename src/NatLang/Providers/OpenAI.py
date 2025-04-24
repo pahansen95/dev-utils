@@ -49,14 +49,6 @@ CHAT_MODELS |= { m.name: m for m in (
     }
   ),
   GPT(
-    'gpt-4.5',
-    {
-      'version': 'gpt-4.5-preview-2025-02-27',
-      'inputSize': 128_000,
-      'outputSize': 16_384,
-    }
-  ),
-  GPT(
     'chatgpt',
     {
       'version': 'chatgpt-4o-latest',
@@ -84,28 +76,17 @@ CHAT_MODELS |= { m.name: m for m in (
 
 @dataclass
 class Reasoning(ChatModel):
-  name: Literal['o1', 'o1-mini', 'o3-mini']
+  name: Literal['o3-mini']
   _: KW_ONLY
   caps: ModelCapabilities = field(init=False, default_factory=lambda: model_capabilities(chat=True))
 
 CHAT_MODELS |= { m.name: m for m in (
   Reasoning(
-    'o1',
+    'o4-mini',
     {
-      'version': 'o1',
+      'version': 'o4-mini',
       'inputSize': 200_000,
       'outputSize': 100_000,
-    },
-    opts={
-      'reasoning_effort': 'low'
-    },
-  ),
-  Reasoning(
-    'o1-mini',
-    {
-      'version': 'o1-mini',
-      'inputSize': 128_000,
-      'outputSize': 65_536,
     },
     opts={
       'reasoning_effort': 'low'
@@ -115,6 +96,17 @@ CHAT_MODELS |= { m.name: m for m in (
     'o3-mini',
     {
       'version': 'o3-mini',
+      'inputSize': 200_000,
+      'outputSize': 100_000,
+    },
+    opts={
+      'reasoning_effort': 'low'
+    },
+  ),
+  Reasoning(
+    'o3',
+    {
+      'version': 'o3',
       'inputSize': 200_000,
       'outputSize': 100_000,
     },
@@ -151,6 +143,8 @@ EMBED_MODELS |= {
   ),
 }
 
+### Responses API
+
 class TextContent(TypedDict):
   type: Literal['input_text']
   text: str
@@ -180,6 +174,41 @@ class ModelInput(TypedDict):
     elif msg['role'] in { c.Role.AGENT, c.Role.OTHER }: _msg['role'] = 'assistant'
     else: raise NotImplementedError(c.Role.name)
     return _msg
+
+### Chat Completions
+
+class _Message(TypedDict):
+  role: str
+  content: str
+  name: NotRequired[str]
+
+  @staticmethod
+  def transform(msg: c.ChatMessage) -> MSG_T:
+    _msg: MSG_T = { 'content': msg['content'] }
+    if 'author' in msg.get('props', {}): _msg['name'] = msg['props']['author']
+    if msg['role'] in { c.Role.PLATFORM, c.Role.DEVELOPER }: _msg['role'] = '' # Passthrough
+    elif msg['role'] in { c.Role.USER, }: _msg['role'] = 'user'
+    elif msg['role'] in { c.Role.AGENT, c.Role.OTHER }: _msg['role'] = 'assistant'
+    else: raise NotImplementedError(c.Role.name)
+    return _msg
+
+class MessageV1(_Message, TypedDict):
+  role: Literal['system', 'user', 'assistant']
+  @staticmethod
+  def transform(msg: c.ChatMessage) -> MessageV1:
+    _msg: MessageV1 = _Message.transform(msg)
+    if msg['role'] in { c.Role.PLATFORM, c.Role.DEVELOPER }: _msg['role'] = 'system'
+    return _msg
+
+class MessageV2(_Message, TypedDict):
+  role: Literal['developer', 'user', 'assistant']
+  @staticmethod
+  def transform(msg: c.ChatMessage) -> MessageV2:
+    _msg: MessageV2 = _Message.transform(msg)
+    if msg['role'] in { c.Role.PLATFORM, c.Role.DEVELOPER }: _msg['role'] = 'developer'
+    return _msg
+
+MSG_T = type[MessageV1 | MessageV2]
 
 @dataclass
 class OpenAIEndpoints:
@@ -219,12 +248,15 @@ class OpenAI(BaseModelProvider):
   cfg: OpenAICfg
 
   def chat(self, model: str, *messages: c.ChatMessage) -> c.ChatMessage:
-    _model = self.models[model]
     _chat_endpoint = self.cfg.endpoints.chat
+    _model = self.models[model]
+    _model_opts = _model.opts
+    if isinstance(_model, Reasoning) and _chat_endpoint.endswith('responses'):
+      _model_opts['reasoning'] = { 'effort': _model_opts.pop('reasoning_effort') }
     try:
       resp = self.session.retry_request(
         path=_chat_endpoint,
-        body=( _model.opts | {
+        body=( _model_opts | {
           'model': _model.cfg['version'],
           'input': list(map(ModelInput.transform, messages)),
         } ),
@@ -235,9 +267,12 @@ class OpenAI(BaseModelProvider):
       err_msg = f'OpenAI Provider Error: {e}'
       logger.debug(err_msg)
       raise RuntimeError(err_msg) from e
-    else: return {
+    else:
+      resp_messages = next(x for x in resp['output'] if x['type'] == 'message')
+      resp_content = next(x for x in resp_messages['content'] if x['type'] == 'output_text')
+      return {
       'role': c.Role.AGENT,
-      'content': resp['output'][0]['content'][0]['text'], # For now we assume only text responses
+      'content': resp_content['text'],
       'props': {
         'author': f'{model}',
         'agent_requested_version': _model.cfg['version'],

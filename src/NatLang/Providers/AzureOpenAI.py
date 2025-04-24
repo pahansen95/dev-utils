@@ -25,7 +25,7 @@ class AzureOAIEndpoints:
   chat: str = '/chat/completions'
   embed: str = '/embeddings'
   # For latest API Specs see: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference#api-specs
-  inference_api_version: str = '2025-02-01-preview'
+  inference_api_version: str = '2025-03-01-preview'
 
 @dataclass
 class AzureOAICfg(p.ProviderCfg):
@@ -55,6 +55,7 @@ class AzureOAI(OpenAI):
   cfg: AzureOAICfg
 
   def chat(self, model: str, *messages: c.ChatMessage) -> c.ChatMessage:
+    ### NOTE: For now we still use the Chat Completion API b/c the Responses API isn't fully supported.
     _model = self.models[model]
     _chat_endpoint = f'/openai/deployments/{_model.name}/{self.cfg.endpoints.chat.lstrip('/')}'
     _api_version = self.cfg.endpoints.inference_api_version
