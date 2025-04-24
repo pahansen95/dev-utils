@@ -151,44 +151,40 @@ EMBED_MODELS |= {
   ),
 }
 
+class TextContent(TypedDict):
+  type: Literal['input_text']
+  text: str
+class ImageContent(TypedDict):
+  type: Literal['input_image']
+  detail: Literal['high', 'low', 'auto']
+  file_id: NotRequired[str]
+  image_url: NotRequired[str]
+  """HTTP Url or Base64 as DataURL `f'data:image/jpeg;base64,{base64_image}'`"""
+class FileContent(TypedDict):
+  type: Literal['input_file']
+  file_data: NotRequired[str]
+  file_id: NotRequired[str]
+  filename: NotRequired[str]
 
-class _Message(TypedDict):
-  role: str
-  content: str
-  name: NotRequired[str]
-
-  @staticmethod
-  def transform(msg: c.ChatMessage) -> MSG_T:
-    _msg: MSG_T = { 'content': msg['content'] }
-    if 'author' in msg.get('props', {}): _msg['name'] = msg['props']['author']
-    if msg['role'] in { c.Role.PLATFORM, c.Role.DEVELOPER }: _msg['role'] = '' # Passthrough
+class ModelInput(TypedDict):
+  content: TextContent | ImageContent | FileContent
+  role: Literal['user', 'assistant', 'developer']
+  type: Literal['message']
+  
+  @classmethod
+  def transform(cls, msg: c.ChatMessage) -> ModelInput:
+    ### For now we only assume text content
+    _msg = { 'type': 'message', 'content': msg['content'] }
+    if msg['role'] in { c.Role.PLATFORM, c.Role.DEVELOPER }: _msg['role'] = 'developer'
     elif msg['role'] in { c.Role.USER, }: _msg['role'] = 'user'
     elif msg['role'] in { c.Role.AGENT, c.Role.OTHER }: _msg['role'] = 'assistant'
     else: raise NotImplementedError(c.Role.name)
     return _msg
 
-class MessageV1(_Message, TypedDict):
-  role: Literal['system', 'user', 'assistant']
-  @staticmethod
-  def transform(msg: c.ChatMessage) -> MessageV1:
-    _msg: MessageV1 = _Message.transform(msg)
-    if msg['role'] in { c.Role.PLATFORM, c.Role.DEVELOPER }: _msg['role'] = 'system'
-    return _msg
-
-class MessageV2(_Message, TypedDict):
-  role: Literal['developer', 'user', 'assistant']
-  @staticmethod
-  def transform(msg: c.ChatMessage) -> MessageV2:
-    _msg: MessageV2 = _Message.transform(msg)
-    if msg['role'] in { c.Role.PLATFORM, c.Role.DEVELOPER }: _msg['role'] = 'developer'
-    return _msg
-
-MSG_T = type[MessageV1 | MessageV2]
-
 @dataclass
 class OpenAIEndpoints:
   _: KW_ONLY
-  chat: str = '/chat/completions'
+  chat: str = '/responses'
   embed: str = '/embeddings'
 
 @dataclass
@@ -225,16 +221,12 @@ class OpenAI(BaseModelProvider):
   def chat(self, model: str, *messages: c.ChatMessage) -> c.ChatMessage:
     _model = self.models[model]
     _chat_endpoint = self.cfg.endpoints.chat
-    if isinstance(_model, GPT): _Message = MessageV1
-    elif isinstance(_model, Reasoning): _Message = MessageV2
-    else: raise TypeError(type(_model))
-    _messages = list(map(_Message.transform, messages))
     try:
       resp = self.session.retry_request(
         path=_chat_endpoint,
         body=( _model.opts | {
           'model': _model.cfg['version'],
-          'messages': _messages,
+          'input': list(map(ModelInput.transform, messages)),
         } ),
       )
       assert resp['kind'] == 'response'
@@ -243,12 +235,16 @@ class OpenAI(BaseModelProvider):
       err_msg = f'OpenAI Provider Error: {e}'
       logger.debug(err_msg)
       raise RuntimeError(err_msg) from e
-    else: return { 'role': c.Role.AGENT, 'content': resp['choices'][0]['message']['content'], 'props': {
-      'author': f'{model}',
-      'agent_requested_version': _model.cfg['version'],
-      'agent_provider_version': resp.get('model', None),
-      'created_at': time.time_ns(),
-    } }
+    else: return {
+      'role': c.Role.AGENT,
+      'content': resp['output'][0]['content'][0]['text'], # For now we assume only text responses
+      'props': {
+        'author': f'{model}',
+        'agent_requested_version': _model.cfg['version'],
+        'agent_provider_version': resp.get('model', None),
+        'created_at': time.time_ns(),
+      }
+    }
 
   def embed(self, model: str, *content: p.CONTENT) -> p.Embedding:
     _model = self.models[model]
